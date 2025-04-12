@@ -1,0 +1,38 @@
+{
+    "name": "securechat",
+    "version": "1.0.0",
+    "description": "End-to-end encrypted messaging platform similar to Discord",
+    "main": "index.js",
+    "scripts": {
+      "start": "concurrently \"npm run server\" \"npm run client\"",
+      "server": "cd server && npm start",
+      "client": "cd client && npm start",
+      "server:install": "cd server && npm install",
+      "client:install": "cd client && npm install",
+      "install-all": "npm install && npm run server:install && npm run client:install",
+      "setup-db": "cd server && node db-setup.js",
+      "build": "cd client && npm run build",
+      "test": "concurrently \"cd server && npm test\" \"cd client && npm test\"",
+      "lint": "concurrently \"cd server && npm run lint\" \"cd client && npm run lint\""
+    },
+    "keywords": [
+      "chat",
+      "encryption",
+      "secure",
+      "e2ee",
+      "messaging",
+      "socket.io",
+      "mongodb",
+      "react",
+      "node"
+    ],
+    "author": "Your Name",
+    "license": "MIT",
+    "devDependencies": {
+      "concurrently": "^7.6.0"
+    },
+    "engines": {
+      "node": ">=14.0.0",
+      "npm": ">=6.0.0"
+    }
+  }
