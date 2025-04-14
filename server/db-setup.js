@@ -6,10 +6,10 @@ const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
 
 // Import models
-const User = require('./server/models/User');
-const Server = require('./server/models/Server');
-const Channel = require('./server/models/Channel');
-const KeyExchange = require('./server/models/KeyExchange');
+const User = require('./models/User');
+const Server = require('./models/Server');
+const Channel = require('./models/Channel');
+const KeyExchange = require('./models/KeyExchange');
 
 // Load environment variables
 dotenv.config();
