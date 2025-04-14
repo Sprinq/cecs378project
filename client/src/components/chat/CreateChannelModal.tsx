@@ -1,16 +1,29 @@
-// components/chat/CreateChannelModal.js
-import React, { useState } from 'react';
+// components/chat/CreateChannelModal.tsx
+import React, { useState, FormEvent } from 'react';
 import Modal from '../common/Modal';
 import { channelService } from '../../services/api';
 import { Hash, Volume2 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { Channel } from '../../types';
 
-const CreateChannelModal = ({ isOpen, onClose, serverId, onCreate }) => {
-  const [channelName, setChannelName] = useState('');
-  const [channelType, setChannelType] = useState('text');
-  const [loading, setLoading] = useState(false);
+interface CreateChannelModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  serverId: string;
+  onCreate: (channel: Channel) => void;
+}
+
+const CreateChannelModal: React.FC<CreateChannelModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  serverId, 
+  onCreate 
+}) => {
+  const [channelName, setChannelName] = useState<string>('');
+  const [channelType, setChannelType] = useState<'text' | 'voice'>('text');
+  const [loading, setLoading] = useState<boolean>(false);
   
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!channelName.trim()) {

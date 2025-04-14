@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Lock, User, LogIn, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { authService } from '../../services/api';
 import { toast } from 'react-toastify';
+import { AxiosError } from 'axios';
 
 interface LoginProps {
   onLogin: (user: any) => void;
@@ -33,9 +34,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       
       toast.success('Login successful!');
       navigate('/');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Login error:', error);
-      toast.error(error.response?.data?.message || 'Login failed. Please try again.');
+      if (error instanceof AxiosError) {
+        toast.error(error.response?.data?.message || 'Login failed. Please try again.');
+      } else {
+        toast.error('Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

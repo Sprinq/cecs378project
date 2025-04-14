@@ -9,7 +9,7 @@ import { authService } from './services/api';
 import { initSocket, cleanup } from './services/socket';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { User } from './types.ts';
+import { User } from './types';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);

@@ -67,7 +67,7 @@ const MessageList: React.FC<MessageListProps> = ({ channelId, currentUserId }) =
   
   // Listen for new messages
   useEffect(() => {
-    const unsubscribe = onNewMessage(newMessage => {
+    const unsubscribe = onNewMessage((newMessage: MessageType) => {
       if (newMessage.channel === channelId) {
         setMessages(prevMessages => [...prevMessages, newMessage]);
       }
@@ -93,10 +93,17 @@ const MessageList: React.FC<MessageListProps> = ({ channelId, currentUserId }) =
           return;
         }
         
+        // Create query parameters
+        let queryParams = '';
+        if (oldestMessage.createdAt) {
+          queryParams = `before=${oldestMessage.createdAt}`;
+        }
+        
+        // Pass null as the third parameter since we're including the timestamp in the URL query
         const olderMessages = await messageService.getMessages(
           channelId,
           50,
-          oldestMessage.createdAt
+          null // Pass null instead of Date object
         );
         
         if (olderMessages.length === 0) {

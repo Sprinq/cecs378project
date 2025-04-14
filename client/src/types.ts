@@ -44,6 +44,13 @@ export interface User {
     createdAt: string;
     updatedAt?: string;
   }
+
+  export interface MessageService {
+    sendMessage: (content: string, channelId: string, replyTo?: string | null) => Promise<any>;
+    getMessages: (channelId: string, limit?: number, before?: string | null) => Promise<any>;
+    deleteMessage: (messageId: string) => Promise<any>;
+    editMessage: (messageId: string, content: string, channelId: string) => Promise<any>;
+  }
   
   export interface KeyExchange {
     _id: string;
