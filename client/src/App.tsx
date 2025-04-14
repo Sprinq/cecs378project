@@ -1,4 +1,4 @@
-// src/App.js - Main React application
+// src/App.tsx - Main React application
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import Login from './components/auth/Login';
@@ -9,10 +9,11 @@ import { authService } from './services/api';
 import { initSocket, cleanup } from './services/socket';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { User } from './types.ts';
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   // Check if user is logged in on app load
   useEffect(() => {
@@ -42,7 +43,7 @@ function App() {
   }, []);
 
   // Handle login
-  const handleLogin = (userData) => {
+  const handleLogin = (userData: User) => {
     setUser(userData);
     localStorage.setItem('user_id', userData._id);
     initSocket(userData._id);
@@ -62,7 +63,7 @@ function App() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
       </div>
     );
@@ -70,7 +71,7 @@ function App() {
 
   return (
     <Router>
-      <div className="h-screen bg-gray-900">
+      <div className="h-screen bg-gradient-to-b from-gray-900 to-gray-800">
         <ToastContainer
           position="top-right"
           autoClose={5000}

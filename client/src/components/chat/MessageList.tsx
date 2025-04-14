@@ -1,4 +1,4 @@
-// components/chat/MessageList.js
+// components/chat/MessageList.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { messageService } from '../../services/api';
 import { onNewMessage } from '../../services/socket';
@@ -6,17 +6,28 @@ import Message from './Message';
 import { format } from 'date-fns';
 import { MessageSquare } from 'lucide-react';
 import Loading from '../common/Loading';
+import { Message as MessageType } from '../../types';
 
-const MessageList = ({ channelId, currentUserId }) => {
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+interface MessageListProps {
+  channelId: string;
+  currentUserId: string;
+}
+
+interface MessageGroup {
+  date: string;
+  messages: MessageType[];
+}
+
+const MessageList: React.FC<MessageListProps> = ({ channelId, currentUserId }) => {
+  const [messages, setMessages] = useState<MessageType[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
   
-  const messagesEndRef = useRef(null);
-  const containerRef = useRef(null);
-  const observerRef = useRef(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
   
   // Fetch messages when channelId changes
   useEffect(() => {
@@ -115,19 +126,19 @@ const MessageList = ({ channelId, currentUserId }) => {
     
     const container = containerRef.current;
     if (container && messages.length > 0) {
-      observer.observe(container.firstChild);
+      observer.observe(container.firstChild as Element);
     }
     
     return () => {
       if (container && container.firstChild) {
-        observer.unobserve(container.firstChild);
+        observer.unobserve(container.firstChild as Element);
       }
     };
   }, [channelId, messages, hasMore, loadingMore]);
   
   // Group messages by date
-  const groupMessagesByDate = () => {
-    const groups = {};
+  const groupMessagesByDate = (): MessageGroup[] => {
+    const groups: Record<string, MessageType[]> = {};
     
     messages.forEach(message => {
       const date = new Date(message.createdAt).toLocaleDateString();
@@ -137,7 +148,10 @@ const MessageList = ({ channelId, currentUserId }) => {
       groups[date].push(message);
     });
     
-    return groups;
+    return Object.keys(groups).map(date => ({
+      date,
+      messages: groups[date]
+    }));
   };
   
   const messageGroups = groupMessagesByDate();
@@ -153,13 +167,18 @@ const MessageList = ({ channelId, currentUserId }) => {
   if (error) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-red-500">
-          <p>{error}</p>
+        <div className="text-center p-6 bg-gray-800/60 backdrop-blur-sm rounded-xl border border-red-500/30 shadow-lg">
+          <div className="text-red-400 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p className="text-red-300 mb-4 font-medium">{error}</p>
           <button
-            className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white"
+            className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-600 rounded-md text-white transition-colors shadow-md"
             onClick={() => window.location.reload()}
           >
-            Retry
+            Try Again
           </button>
         </div>
       </div>
@@ -169,10 +188,13 @@ const MessageList = ({ channelId, currentUserId }) => {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-center text-gray-400">
-          <MessageSquare className="h-12 w-12 mx-auto mb-2" />
-          <p className="text-lg">No messages yet</p>
-          <p className="text-sm">Be the first to send a message!</p>
+        <div className="text-center p-6 bg-gray-800/60 backdrop-blur-sm rounded-xl border border-gray-700/50 shadow-lg">
+          <div className="relative mb-4">
+            <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-20 rounded-full"></div>
+            <MessageSquare className="h-12 w-12 mx-auto text-indigo-400 relative z-10" />
+          </div>
+          <p className="text-lg text-white font-medium mb-2">No messages yet</p>
+          <p className="text-gray-400">Be the first to send a message!</p>
         </div>
       </div>
     );
@@ -180,7 +202,7 @@ const MessageList = ({ channelId, currentUserId }) => {
   
   return (
     <div 
-      className="flex-1 overflow-y-auto p-4 bg-gray-900"
+      className="flex-1 overflow-y-auto p-4 bg-gray-900/50"
       ref={containerRef}
     >
       {loadingMore && (
@@ -189,21 +211,23 @@ const MessageList = ({ channelId, currentUserId }) => {
         </div>
       )}
       
-      {Object.keys(messageGroups).map(date => (
-        <div key={date}>
-          <div className="relative py-2 flex items-center">
-            <div className="flex-grow border-t border-gray-700"></div>
-            <span className="flex-shrink mx-4 text-xs text-gray-500">
-              {format(new Date(date), 'MMMM d, yyyy')}
+      {messageGroups.map(group => (
+        <div key={group.date}>
+          <div className="relative py-3 flex items-center my-2">
+            <div className="flex-grow border-t border-gray-700/50"></div>
+            <span className="flex-shrink-0 mx-4 py-1 px-3 text-xs text-gray-500 bg-gray-800/60 backdrop-blur-sm rounded-full">
+              {format(new Date(group.date), 'MMMM d, yyyy')}
             </span>
-            <div className="flex-grow border-t border-gray-700"></div>
+            <div className="flex-grow border-t border-gray-700/50"></div>
           </div>
           
-          {messageGroups[date].map(message => (
+          {group.messages.map(message => (
             <Message
               key={message._id}
               message={message}
-              isCurrentUser={message.sender._id === currentUserId}
+              isCurrentUser={typeof message.sender === 'string' 
+                ? message.sender === currentUserId 
+                : message.sender._id === currentUserId}
             />
           ))}
         </div>

@@ -1,8 +1,17 @@
-// components/common/Modal.js
-import React, { useEffect, useRef } from 'react';
+// components/common/Modal.tsx
+import React, { useEffect, useRef, ReactNode } from 'react';
 import { X } from 'lucide-react';
 
-const Modal = ({ 
+interface ModalProps { 
+  isOpen: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  title: string;
+  size?: 'small' | 'medium' | 'large' | 'xl';
+  showCloseButton?: boolean;
+}
+
+const Modal: React.FC<ModalProps> = ({ 
   isOpen, 
   onClose, 
   children, 
@@ -10,7 +19,7 @@ const Modal = ({
   size = 'medium',
   showCloseButton = true
 }) => {
-  const modalRef = useRef(null);
+  const modalRef = useRef<HTMLDivElement>(null);
   
   // Handle sizes
   const sizes = {
@@ -22,7 +31,7 @@ const Modal = ({
   
   // Close on escape key press
   useEffect(() => {
-    const handleEscape = (e) => {
+    const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
       }
@@ -39,8 +48,8 @@ const Modal = ({
   
   // Handle click outside to close
   useEffect(() => {
-    const handleOutsideClick = (e) => {
-      if (modalRef.current && !modalRef.current.contains(e.target)) {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
@@ -68,14 +77,17 @@ const Modal = ({
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-75 p-4">
-      <div ref={modalRef} className={`bg-gray-800 rounded-lg shadow-xl w-full ${sizes[size]} max-h-[90vh] overflow-hidden flex flex-col`}>
-        <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/80 backdrop-blur-sm p-4">
+      <div 
+        ref={modalRef} 
+        className={`bg-gray-800 bg-opacity-95 backdrop-blur-sm rounded-xl shadow-2xl w-full ${sizes[size]} max-h-[90vh] overflow-hidden flex flex-col border border-gray-700/50 animate-fadeIn`}
+      >
+        <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between bg-gray-800/80">
           <h3 className="text-xl font-semibold text-white">{title}</h3>
           {showCloseButton && (
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-gray-400 hover:text-white p-1.5 hover:bg-gray-700/50 rounded-md transition-colors"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
