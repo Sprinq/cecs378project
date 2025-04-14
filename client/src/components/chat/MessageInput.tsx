@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, FormEvent, ChangeEvent } from 'reac
 import { Lock, Send, Paperclip, Smile, Mic } from 'lucide-react';
 import { sendMessage, sendTypingIndicator } from '../../services/socket';
 import { toast } from 'react-toastify';
+import './MessageInput.css';
 
 interface MessageInputProps {
   channelId: string;

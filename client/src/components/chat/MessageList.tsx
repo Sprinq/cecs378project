@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { MessageSquare } from 'lucide-react';
 import Loading from '../common/Loading';
 import { Message as MessageType } from '../../types';
+import './MessageList.css';
 
 interface MessageListProps {
   channelId: string;

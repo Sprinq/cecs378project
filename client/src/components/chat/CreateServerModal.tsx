@@ -5,6 +5,7 @@ import { serverService } from '../../services/api';
 import { Shield, X, Upload, Check } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Server } from '../../types';
+import './CreateServerModal.css';
 
 interface CreateServerModalProps {
   isOpen: boolean;

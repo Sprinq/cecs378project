@@ -10,6 +10,7 @@ import { initSocket, cleanup } from './services/socket';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { User } from './types';
+import './styles/main.css';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);

@@ -3,6 +3,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Hash, Plus, ChevronDown, Settings, Volume2 } from 'lucide-react';
 import { Server, User, Channel } from '../../types';
+import './ChannelList.css';
 
 interface ChannelListProps { 
   server: Server;

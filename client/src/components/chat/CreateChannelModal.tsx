@@ -5,6 +5,7 @@ import { channelService } from '../../services/api';
 import { Hash, Volume2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Channel } from '../../types';
+import './CreateChannelModal.css';
 
 interface CreateChannelModalProps {
   isOpen: boolean;

@@ -13,6 +13,7 @@ import CreateChannelModal from './CreateChannelModal';
 import { Menu, X, Hash, Settings, LogOut, Plus, Lock as LockIcon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { User, Server, Channel } from '../../types';
+import './Chat.css';
 
 interface ChatProps {
   user: User | null;

@@ -2,6 +2,7 @@
 import React from 'react';
 import { Crown, Circle } from 'lucide-react';
 import { Server, User } from '../../types';
+import './UserList.css';
 
 interface UserListProps {
   server: Server;

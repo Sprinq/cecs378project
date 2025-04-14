@@ -46,10 +46,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
-
   return (
     <div className="login-container">
       <div className="login-card">

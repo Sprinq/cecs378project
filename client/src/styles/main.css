@@ -1,0 +1,79 @@
+/* main.css - Main stylesheet for importing all styles */
+
+/* Import Tailwind base, components, and utilities */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Import custom styles */
+@import './variables.css';
+@import './app.css';
+@import './utils.css';
+@import './toast.css';
+
+/* Component-specific styles */
+@import '../components/auth/Login.css';
+@import '../components/auth/Register.css';
+@import '../components/chat/Chat.css';
+@import '../components/chat/MessageList.css';
+@import '../components/chat/Message.css';
+@import '../components/chat/MessageInput.css';
+@import '../components/chat/ServerList.css';
+@import '../components/chat/ChannelList.css';
+@import '../components/chat/UserList.css';
+@import '../components/chat/CreateServerModal.css';
+@import '../components/chat/CreateChannelModal.css';
+@import '../components/common/Modal.css';
+@import '../components/common/Loading.css';
+
+/* Responsive styles */
+@media (max-width: 640px) {
+  /* Mobile styles */
+  .mobile-hidden {
+    display: none !important;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  /* Tablet styles */
+  .tablet-hidden {
+    display: none !important;
+  }
+}
+
+/* Dark mode overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* These colors are already dark-mode friendly */
+    /* This section is included for future light mode support */
+  }
+}
+
+/* Print styles */
+@media print {
+  /* Hide elements not appropriate for printing */
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Override background colors for better printing */
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  
+  /* Ensure text is readable on white background */
+  .print-content {
+    color: black !important;
+  }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

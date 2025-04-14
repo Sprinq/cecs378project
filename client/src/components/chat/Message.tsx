@@ -5,6 +5,7 @@ import { Lock, MoreHorizontal, Edit3, Trash2, Reply, Check, X } from 'lucide-rea
 import { messageService } from '../../services/api';
 import { toast } from 'react-toastify';
 import { Message as MessageType, User } from '../../types';
+import './Message.css';
 
 interface MessageProps {
   message: MessageType;

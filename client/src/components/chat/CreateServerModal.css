@@ -1,0 +1,209 @@
+/* components/chat/CreateServerModal.css */
+.create-server-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .server-icon-container {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  
+  .icon-glow {
+    position: absolute;
+    inset: -10px;
+    background-color: rgba(79, 70, 229, 0.2);
+    border-radius: 50%;
+    filter: blur(16px);
+  }
+  
+  .server-icon {
+    position: relative;
+    z-index: 1;
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    border-radius: 50%;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .create-server-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: white;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  
+  .create-server-subtitle {
+    color: #94a3b8;
+    text-align: center;
+    margin-bottom: 24px;
+    max-width: 400px;
+  }
+  
+  .server-form {
+    width: 100%;
+    max-width: 400px;
+  }
+  
+  .form-group {
+    margin-bottom: 24px;
+  }
+  
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .server-name-input {
+    width: 100%;
+    padding: 12px 16px;
+    background-color: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    border-radius: 8px;
+    color: white;
+    font-size: 15px;
+    transition: all 0.2s ease;
+  }
+  
+  .server-name-input:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.25);
+  }
+  
+  .server-name-input::placeholder {
+    color: #64748b;
+  }
+  
+  .upload-area {
+    width: 100%;
+    height: 120px;
+    border: 2px dashed rgba(71, 85, 105, 0.5);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: rgba(15, 23, 42, 0.3);
+    padding: 16px;
+  }
+  
+  .upload-area:hover {
+    border-color: #4f46e5;
+    background-color: rgba(79, 70, 229, 0.1);
+  }
+  
+  .upload-icon {
+    margin-bottom: 12px;
+    color: #94a3b8;
+  }
+  
+  .upload-text {
+    font-size: 14px;
+    color: #94a3b8;
+    text-align: center;
+  }
+  
+  .upload-text-main {
+    font-weight: 500;
+    color: #cbd5e1;
+  }
+  
+  .upload-hint {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 4px;
+  }
+  
+  .form-hint {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 6px;
+  }
+  
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  
+  .cancel-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .cancel-button:hover {
+    color: white;
+    background-color: rgba(51, 65, 85, 0.7);
+  }
+  
+  .create-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    border: none;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .create-button:hover {
+    background: linear-gradient(135deg, #4338ca, #4f46e5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  }
+  
+  .create-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+  
+  .loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .button-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }

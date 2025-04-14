@@ -1,5 +1,6 @@
 // components/common/Loading.tsx
 import React from 'react';
+import './Loading.css';
 
 interface LoadingProps {
   size?: 'small' | 'medium' | 'large';

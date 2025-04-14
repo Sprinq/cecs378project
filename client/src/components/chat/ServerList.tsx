@@ -3,6 +3,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, LogOut } from 'lucide-react';
 import { Server } from '../../types';
+import './ServerList.css';
 
 interface ServerListProps {
   servers: Server[];

@@ -14,6 +14,7 @@ import {
 import { authService } from '../../services/api';
 import { toast } from 'react-toastify';
 import { User as UserType } from '../../types';
+import './Register.css';
 
 interface RegisterProps {
   onRegister: (user: UserType) => void;
