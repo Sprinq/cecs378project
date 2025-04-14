@@ -1,6 +1,6 @@
 // services/api.js - Frontend API service
 import axios from 'axios';
-import * as cryptoUtils from '../../utils/crypto';
+import * as cryptoUtils from '../utils/crypto';
 
 // Create axios instance with base URL and credentials
 const api = axios.create({

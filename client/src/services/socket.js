@@ -1,6 +1,6 @@
 // services/socket.js - WebSocket service using Socket.IO
 import { io } from 'socket.io-client';
-import * as cryptoUtils from '../../utils/crypto';
+import * as cryptoUtils from '../utils/crypto';
 import { messageService } from './api';
 
 let socket;
