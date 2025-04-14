@@ -22,8 +22,8 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       
       try {
-        // Try to refresh the token
-        await refreshToken();
+        // Try to refresh the token - using the authService
+        await authService.refreshToken();
         
         // Retry the original request
         return api(originalRequest);
