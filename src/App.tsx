@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import UserSettings from './components/UserSettings';
+import JoinServer from './components/JoinServer';
 import { useAuthStore } from './stores/authStore';
 import { supabase } from './lib/supabase';
 
@@ -55,48 +56,51 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-900 text-white">
-        <nav className="bg-gray-800 border-b border-gray-700">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center">
-                <Link to="/" className="flex items-center">
-                  <Shield className="h-8 w-8 text-indigo-500" />
-                  <span className="ml-2 text-xl font-bold">SecureChat</span>
-                </Link>
+        {/* Only show the navbar if not on the invite page */}
+        {!window.location.pathname.startsWith('/invite/') && (
+          <nav className="bg-gray-800 border-b border-gray-700">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center justify-between h-16">
+                <div className="flex items-center">
+                  <Link to="/" className="flex items-center">
+                    <Shield className="h-8 w-8 text-indigo-500" />
+                    <span className="ml-2 text-xl font-bold">SecureChat</span>
+                  </Link>
+                  
+                  {session && (
+                    <div className="ml-10 flex items-center space-x-2">
+                      <AppNavLink to="/dashboard/server" icon={Shield} label="Servers" />
+                      <AppNavLink to="/dashboard/friends" icon={Users} label="Friends" />
+                      <AppNavLink to="/dashboard/dm" icon={MessageSquare} label="Messages" />
+                    </div>
+                  )}
+                </div>
                 
                 {session && (
-                  <div className="ml-10 flex items-center space-x-2">
-                    <AppNavLink to="/dashboard/server" icon={Shield} label="Servers" />
-                    <AppNavLink to="/dashboard/friends" icon={Users} label="Friends" />
-                    <AppNavLink to="/dashboard/dm" icon={MessageSquare} label="Messages" />
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center text-gray-300">
+                      <User className="h-4 w-4 mr-2" />
+                      <span className="text-sm font-medium">{username || session.user.email}</span>
+                    </div>
+                    <button
+                      onClick={toggleSettings}
+                      className="flex items-center text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                    >
+                      <Settings className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                    >
+                      <LogOut className="h-5 w-5 mr-2" />
+                      Sign Out
+                    </button>
                   </div>
                 )}
               </div>
-              
-              {session && (
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center text-gray-300">
-                    <User className="h-4 w-4 mr-2" />
-                    <span className="text-sm font-medium">{username || session.user.email}</span>
-                  </div>
-                  <button
-                    onClick={toggleSettings}
-                    className="flex items-center text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
-                  >
-                    <Settings className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={handleSignOut}
-                    className="flex items-center text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
-                  >
-                    <LogOut className="h-5 w-5 mr-2" />
-                    Sign Out
-                  </button>
-                </div>
-              )}
             </div>
-          </div>
-        </nav>
+          </nav>
+        )}
 
         <Routes>
           <Route
@@ -110,6 +114,10 @@ function App() {
           <Route
             path="/dashboard/*"
             element={session ? <Dashboard /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/invite/:inviteCode"
+            element={<JoinServer />}
           />
           <Route
             path="/"

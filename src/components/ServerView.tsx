@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Routes, Route } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Hash, Users } from 'lucide-react';
+import { Hash, Users, Settings, Link as LinkIcon } from 'lucide-react';
 import ChannelView from './ChannelView';
+import ServerInvite from './ServerInvite';
 
 interface Server {
   id: string;
@@ -32,6 +33,8 @@ export default function ServerView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(channelId || null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [userRole, setUserRole] = useState<string>('member');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -91,6 +94,15 @@ export default function ServerView() {
         })) || [];
         
         setMembers(formattedMembers);
+
+        // Get the current user's role
+        const currentUserMember = membersData?.find(member => 
+          member.user_id === supabase.auth.getUser().data?.user?.id
+        );
+        
+        if (currentUserMember) {
+          setUserRole(currentUserMember.role);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load server data');
         console.error(err);
@@ -130,7 +142,7 @@ export default function ServerView() {
       channelsChannel.unsubscribe();
       membersChannel.unsubscribe();
     };
-  }, [serverId]);
+  }, [serverId, selectedChannelId]);
 
   // Effect to update URL when selected channel changes
   useEffect(() => {
@@ -149,6 +161,9 @@ export default function ServerView() {
   const handleChannelClick = (channelId: string) => {
     setSelectedChannelId(channelId);
   };
+
+  // Check if user is admin or owner
+  const canInvite = userRole === 'owner' || userRole === 'admin';
 
   if (loading) {
     return (
@@ -171,7 +186,18 @@ export default function ServerView() {
       {/* Channels sidebar */}
       <div className="w-64 bg-gray-800 p-4 flex flex-col h-full">
         <div className="mb-6">
-          <h3 className="font-semibold text-xl text-white mb-1">{server.name}</h3>
+          <div className="flex justify-between items-center mb-1">
+            <h3 className="font-semibold text-xl text-white">{server.name}</h3>
+            {canInvite && (
+              <button 
+                onClick={() => setShowInviteModal(true)}
+                className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
+                title="Invite People"
+              >
+                <LinkIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
           {server.description && (
             <p className="text-sm text-gray-400">{server.description}</p>
           )}
@@ -242,6 +268,15 @@ export default function ServerView() {
           ))}
         </div>
       </div>
+
+      {/* Server invite modal */}
+      {showInviteModal && server && (
+        <ServerInvite 
+          serverId={server.id} 
+          serverName={server.name}
+          onClose={() => setShowInviteModal(false)} 
+        />
+      )}
     </div>
   );
 }
