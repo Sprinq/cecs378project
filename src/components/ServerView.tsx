@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { Hash, Users, Settings, Link as LinkIcon } from 'lucide-react';
 import ChannelView from './ChannelView';
 import ServerInvite from './ServerInvite';
+import { useAuthStore } from '../stores/authStore';
 
 interface Server {
   id: string;
@@ -35,7 +36,15 @@ export default function ServerView() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(channelId || null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [userRole, setUserRole] = useState<string>('member');
+  const { session } = useAuthStore();
   const navigate = useNavigate();
+
+  // Debug logging to verify user role and session
+  useEffect(() => {
+    if (session?.user) {
+      console.log("Current user ID:", session.user.id);
+    }
+  }, [session]);
 
   useEffect(() => {
     if (!serverId) return;
@@ -54,6 +63,15 @@ export default function ServerView() {
 
         if (serverError) throw serverError;
         setServer(serverData);
+        
+        // Log the server owner ID for debugging
+        console.log("Server owner ID:", serverData.owner_id);
+        
+        // If the current user is the server owner, set their role immediately
+        if (session?.user && serverData.owner_id === session.user.id) {
+          console.log("User is the server owner!");
+          setUserRole('owner');
+        }
 
         // Fetch channels
         const { data: channelsData, error: channelsError } = await supabase
@@ -96,12 +114,15 @@ export default function ServerView() {
         setMembers(formattedMembers);
 
         // Get the current user's role
-        const currentUserMember = membersData?.find(member => 
-          member.user_id === supabase.auth.getUser().data?.user?.id
-        );
-        
-        if (currentUserMember) {
-          setUserRole(currentUserMember.role);
+        if (session?.user) {
+          const currentUserMember = membersData?.find(member => 
+            member.user_id === session.user.id
+          );
+          
+          if (currentUserMember) {
+            console.log("Found member role:", currentUserMember.role);
+            setUserRole(currentUserMember.role);
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load server data');
@@ -142,7 +163,7 @@ export default function ServerView() {
       channelsChannel.unsubscribe();
       membersChannel.unsubscribe();
     };
-  }, [serverId, selectedChannelId]);
+  }, [serverId, selectedChannelId, session]);
 
   // Effect to update URL when selected channel changes
   useEffect(() => {
@@ -158,12 +179,20 @@ export default function ServerView() {
     }
   }, [channelId]);
 
+  useEffect(() => {
+    // Log whenever user role changes
+    console.log("Current user role:", userRole);
+  }, [userRole]);
+
   const handleChannelClick = (channelId: string) => {
     setSelectedChannelId(channelId);
   };
 
   // Check if user is admin or owner
   const canInvite = userRole === 'owner' || userRole === 'admin';
+  
+  // Alternative check - if server exists and current user is the owner
+  const isServerOwner = server && session?.user && server.owner_id === session.user.id;
 
   if (loading) {
     return (
@@ -188,7 +217,8 @@ export default function ServerView() {
         <div className="mb-6">
           <div className="flex justify-between items-center mb-1">
             <h3 className="font-semibold text-xl text-white">{server.name}</h3>
-            {canInvite && (
+            {/* Show invite button if either canInvite OR isServerOwner is true */}
+            {(canInvite || isServerOwner) && (
               <button 
                 onClick={() => setShowInviteModal(true)}
                 className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
@@ -201,6 +231,11 @@ export default function ServerView() {
           {server.description && (
             <p className="text-sm text-gray-400">{server.description}</p>
           )}
+          
+          {/* Debug info for development */}
+          <div className="mt-2 text-xs text-gray-500">
+            Role: {userRole} | Owner: {isServerOwner ? 'Yes' : 'No'} | Can invite: {canInvite || isServerOwner ? 'Yes' : 'No'}
+          </div>
         </div>
         
         <div className="mb-4">
