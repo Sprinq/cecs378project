@@ -8,6 +8,7 @@ export default function JoinServer() {
   const { inviteCode } = useParams();
   const { session } = useAuthStore();
   const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serverDetails, setServerDetails] = useState<{ id: string; name: string } | null>(null);
   const navigate = useNavigate();
@@ -18,6 +19,11 @@ export default function JoinServer() {
       if (!inviteCode || !session?.user) return;
 
       try {
+        setLoading(true);
+        setError(null);
+        
+        console.log("Checking invite code:", inviteCode);
+        
         // First, get server details from the invite code
         const { data: serverData, error: serverError } = await supabase
           .from('servers')
@@ -26,8 +32,11 @@ export default function JoinServer() {
           .single();
 
         if (serverError) {
+          console.error("Error fetching server:", serverError);
           throw new Error('Invalid invite code');
         }
+
+        console.log("Found server:", serverData);
 
         // Check if the invite has expired
         if (serverData.invite_expires_at && new Date(serverData.invite_expires_at) < new Date()) {
@@ -35,15 +44,20 @@ export default function JoinServer() {
         }
 
         // Check if the user is already a member
-        const { data: memberData } = await supabase
+        const { data: memberData, error: memberError } = await supabase
           .from('server_members')
           .select('user_id')
           .eq('server_id', serverData.id)
           .eq('user_id', session.user.id)
-          .single();
+          .maybeSingle();
+          
+        if (memberError) {
+          console.error("Error checking membership:", memberError);
+        }
 
         if (memberData) {
           // User is already a member, redirect to server
+          console.log("User is already a member, redirecting...");
           navigate(`/dashboard/server/${serverData.id}`);
           return;
         }
@@ -66,23 +80,66 @@ export default function JoinServer() {
   const handleJoinServer = async () => {
     if (!inviteCode || !session?.user) return;
 
-    setLoading(true);
+    setJoining(true);
     setError(null);
 
     try {
+      console.log("Attempting to join server with invite code:", inviteCode);
+      
+      // Call the RPC function directly with the invite code
       const { data, error } = await supabase.rpc(
         'join_server_by_invite',
         { invite_code: inviteCode }
       );
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error from RPC call:", error);
+        throw error;
+      }
 
+      console.log("Join server successful, server ID:", data);
+      
       // Navigate to the server
       navigate(`/dashboard/server/${data}`);
     } catch (err) {
       console.error("Error joining server:", err);
       setError(err instanceof Error ? err.message : 'Failed to join server');
-      setLoading(false);
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  // Direct approach for debugging - use a simpler method to join
+  const handleManualJoin = async () => {
+    if (!serverDetails?.id || !session?.user) return;
+    
+    setJoining(true);
+    setError(null);
+    
+    try {
+      console.log("Attempting manual join for server:", serverDetails.id);
+      
+      // Direct insert approach
+      const { error } = await supabase
+        .from('server_members')
+        .insert({
+          server_id: serverDetails.id,
+          user_id: session.user.id,
+          role: 'member'
+        });
+        
+      if (error) {
+        console.error("Error inserting member:", error);
+        throw error;
+      }
+      
+      console.log("Manual join successful");
+      navigate(`/dashboard/server/${serverDetails.id}`);
+    } catch (err) {
+      console.error("Error in manual join:", err);
+      setError(err instanceof Error ? err.message : 'Failed to join server manually');
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -126,12 +183,25 @@ export default function JoinServer() {
         <AlertCircle className="h-16 w-16 text-red-500 mb-6" />
         <h1 className="text-2xl font-bold text-white mb-2">Invalid Invite</h1>
         <p className="text-red-400 mb-6">{error}</p>
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
-        >
-          Back to Dashboard
-        </button>
+        <div className="space-y-4">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
+          >
+            Back to Dashboard
+          </button>
+          {serverDetails && (
+            <div>
+              <p className="text-gray-400 mt-4 mb-2">If you're still having trouble joining:</p>
+              <button
+                onClick={handleManualJoin}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md"
+              >
+                Try Alternative Join Method
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -147,13 +217,16 @@ export default function JoinServer() {
       <div className="flex space-x-4">
         <button
           onClick={handleJoinServer}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md"
+          disabled={joining}
+          className={`px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md flex items-center ${joining ? 'opacity-70 cursor-not-allowed' : ''}`}
         >
-          Accept Invite
+          {joining && <Loader className="h-4 w-4 mr-2 animate-spin" />}
+          {joining ? 'Joining...' : 'Accept Invite'}
         </button>
         <button
           onClick={() => navigate('/dashboard')}
           className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md"
+          disabled={joining}
         >
           Cancel
         </button>
