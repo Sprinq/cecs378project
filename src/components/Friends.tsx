@@ -10,7 +10,6 @@ interface Friend {
   username: string;
   display_name: string | null;
   status: 'online' | 'offline' | 'away';
-  last_seen: string | null;
 }
 
 interface FriendRequest {
@@ -41,8 +40,8 @@ export default function Friends() {
       const { data: friendsData, error: friendsError } = await supabase
         .from('friends')
         .select(`
-          user_id2:users!user_id2(id, username, display_name, last_seen),
-          user_id1:users!user_id1(id, username, display_name, last_seen),
+          user_id2:users!user_id2(id, username, display_name),
+          user_id1:users!user_id1(id, username, display_name),
           status
         `)
         .eq('status', 'accepted')
@@ -61,8 +60,9 @@ export default function Friends() {
           id: friendUser.id,
           username: friendUser.username,
           display_name: friendUser.display_name,
-          status: friendUser.last_seen ? 'online' : 'offline', // Simplified for now
-          last_seen: friendUser.last_seen
+          // Default all users to online for now
+          // In a production app, you'd implement a proper presence system
+          status: 'online' as const
         };
       }) || [];
 
@@ -219,7 +219,7 @@ export default function Friends() {
     }
   };
 
-  const handleMessageFriend = (userId: string, username: string) => {
+  const handleMessageFriend = (userId: string) => {
     navigate(`/dashboard/dm/${userId}`);
   };
 
@@ -386,7 +386,7 @@ export default function Friends() {
                     </div>
                     <div className="flex space-x-1">
                       <button 
-                        onClick={() => handleMessageFriend(friend.id, friend.username)}
+                        onClick={() => handleMessageFriend(friend.id)}
                         className="text-gray-400 hover:text-white p-1.5"
                         title="Message"
                       >
