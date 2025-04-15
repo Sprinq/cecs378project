@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { supabase, generateKeyPair, exportPublicKey } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import ServerList from './ServerList';
@@ -8,29 +8,34 @@ import ServerView from './ServerView';
 export default function Dashboard() {
   const { session } = useAuthStore();
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
 
   useEffect(() => {
     const setupUserKeys = async () => {
       if (!session?.user) return;
 
-      const { data: existingKey } = await supabase
-        .from('user_keys')
-        .select('public_key')
-        .eq('user_id', session.user.id)
-        .single();
+      try {
+        const { data: existingKey } = await supabase
+          .from('user_keys')
+          .select('public_key')
+          .eq('user_id', session.user.id)
+          .single();
 
-      if (!existingKey) {
-        const keyPair = await generateKeyPair();
-        const publicKeyString = await exportPublicKey(keyPair.publicKey);
+        if (!existingKey) {
+          const keyPair = await generateKeyPair();
+          const publicKeyString = await exportPublicKey(keyPair.publicKey);
 
-        await supabase.from('user_keys').insert({
-          user_id: session.user.id,
-          public_key: publicKeyString,
-        });
+          await supabase.from('user_keys').insert({
+            user_id: session.user.id,
+            public_key: publicKeyString,
+          });
 
-        // Store private key securely in memory
-        // In a production app, you might want to encrypt this with a user-provided password
-        sessionStorage.setItem('privateKey', JSON.stringify(await exportPublicKey(keyPair.privateKey)));
+          // Store private key securely in memory
+          // In a production app, you might want to encrypt this with a user-provided password
+          sessionStorage.setItem('privateKey', JSON.stringify(await exportPublicKey(keyPair.privateKey)));
+        }
+      } catch (error) {
+        console.error("Error setting up user keys:", error);
       }
 
       setLoading(false);
@@ -47,6 +52,9 @@ export default function Dashboard() {
     );
   }
 
+  // Check if we're in /dashboard with no subpath
+  const isDashboardRoot = location.pathname === '/dashboard';
+
   return (
     <div className="flex h-screen bg-gray-900">
       <ServerList />
@@ -59,7 +67,11 @@ export default function Dashboard() {
               element={
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-gray-400">
-                    Select a server or create a new one to get started
+                    {isDashboardRoot ? (
+                      "Select a server or create a new one to get started"
+                    ) : (
+                      <Navigate to="/dashboard" replace />
+                    )}
                   </div>
                 </div>
               }
