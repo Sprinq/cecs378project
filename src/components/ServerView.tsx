@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Routes, Route } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Hash, Users, Settings, Link as LinkIcon } from 'lucide-react';
+import { Hash, Users, Settings, Link as LinkIcon, Trash, MoreVertical } from 'lucide-react';
 import ChannelView from './ChannelView';
 import ServerInvite from './ServerInvite';
+import DeleteServerModal from './DeleteServerModal';
 import { useAuthStore } from '../stores/authStore';
 
 interface Server {
@@ -35,6 +36,8 @@ export default function ServerView() {
   const [error, setError] = useState<string | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(channelId || null);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showServerMenu, setShowServerMenu] = useState(false);
   const [userRole, setUserRole] = useState<string>('member');
   const { session } = useAuthStore();
   const navigate = useNavigate();
@@ -194,6 +197,20 @@ export default function ServerView() {
   // Alternative check - if server exists and current user is the owner
   const isServerOwner = server && session?.user && server.owner_id === session.user.id;
 
+  // Handle clicking outside of server menu to close it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showServerMenu) {
+        setShowServerMenu(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showServerMenu]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
@@ -217,25 +234,55 @@ export default function ServerView() {
         <div className="mb-6">
           <div className="flex justify-between items-center mb-1">
             <h3 className="font-semibold text-xl text-white">{server.name}</h3>
-            {/* Show invite button if either canInvite OR isServerOwner is true */}
-            {(canInvite || isServerOwner) && (
-              <button 
-                onClick={() => setShowInviteModal(true)}
-                className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
-                title="Invite People"
-              >
-                <LinkIcon className="h-4 w-4" />
-              </button>
-            )}
+            <div className="flex items-center">
+              {/* Invite button */}
+              {(canInvite || isServerOwner) && (
+                <button 
+                  onClick={() => setShowInviteModal(true)}
+                  className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700 mr-1"
+                  title="Invite People"
+                >
+                  <LinkIcon className="h-4 w-4" />
+                </button>
+              )}
+              
+              {/* Server settings button */}
+              {isServerOwner && (
+                <div className="relative">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowServerMenu(!showServerMenu);
+                    }}
+                    className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
+                    title="Server Settings"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                  
+                  {/* Server settings dropdown */}
+                  {showServerMenu && (
+                    <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
+                      {/* Delete server option */}
+                      <button 
+                        onClick={() => {
+                          setShowServerMenu(false);
+                          setShowDeleteModal(true);
+                        }}
+                        className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
+                      >
+                        <Trash className="h-4 w-4 mr-2" />
+                        Delete Server
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           {server.description && (
             <p className="text-sm text-gray-400">{server.description}</p>
           )}
-          
-          {/* Debug info for development */}
-          <div className="mt-2 text-xs text-gray-500">
-            Role: {userRole} | Owner: {isServerOwner ? 'Yes' : 'No'} | Can invite: {canInvite || isServerOwner ? 'Yes' : 'No'}
-          </div>
         </div>
         
         <div className="mb-4">
@@ -310,6 +357,15 @@ export default function ServerView() {
           serverId={server.id} 
           serverName={server.name}
           onClose={() => setShowInviteModal(false)} 
+        />
+      )}
+
+      {/* Delete server modal */}
+      {showDeleteModal && server && (
+        <DeleteServerModal
+          serverId={server.id}
+          serverName={server.name}
+          onClose={() => setShowDeleteModal(false)}
         />
       )}
     </div>
