@@ -25,6 +25,7 @@ export default function ChannelView() {
   const { session } = useAuthStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [channelName, setChannelName] = useState('');
+  const [channelDetails, setChannelDetails] = useState<{ id: string, server_id: string } | null>(null);
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -40,6 +41,31 @@ export default function ChannelView() {
     try {
       console.log('Fetching messages for channel:', channelId);
       
+      // First, validate that this channel belongs to the current server
+      const { data: channelData, error: channelError } = await supabase
+        .from('channels')
+        .select('id, server_id, name')
+        .eq('id', channelId)
+        .single();
+        
+      if (channelError) {
+        console.error('Error fetching channel:', channelError);
+        setError(`Channel not found or access denied`);
+        return;
+      }
+      
+      // Store channel details for validation
+      setChannelDetails(channelData);
+      setChannelName(channelData.name);
+      
+      // Check if channel belongs to the correct server
+      if (serverId && channelData.server_id !== serverId) {
+        console.error('Channel does not belong to the specified server');
+        setError(`This channel doesn't belong to the current server`);
+        return;
+      }
+      
+      // Now fetch messages
       const { data, error } = await supabase
         .from('messages')
         .select(`
@@ -51,6 +77,9 @@ export default function ChannelView() {
           sender:users!sender_id (
             username,
             display_name
+          ),
+          channel:channels!messages_channel_id_fkey (
+            server_id
           )
         `)
         .eq('channel_id', channelId)
@@ -94,29 +123,10 @@ export default function ChannelView() {
   useEffect(() => {
     if (!channelId) return;
 
-    // Fetch channel info
-    const fetchChannelInfo = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('channels')
-          .select('name')
-          .eq('id', channelId)
-          .single();
-        
-        if (error) {
-          console.error('Error fetching channel info:', error);
-          return;
-        }
-        
-        if (data) {
-          setChannelName(data.name);
-        }
-      } catch (err) {
-        console.error('Unexpected error fetching channel info:', err);
-      }
-    };
-
-    fetchChannelInfo();
+    // Reset messages when changing channels
+    setMessages([]);
+    
+    // Fetch channel info and messages
     fetchMessages();
 
     // Subscribe to new messages
@@ -139,11 +149,22 @@ export default function ChannelView() {
       console.log('Unsubscribing from channel');
       channel.unsubscribe();
     };
-  }, [channelId]);
+  }, [channelId, serverId]); // Also depend on serverId
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !channelId || !session?.user) return;
+    
+    // Validate that we have channel details and it belongs to the current server
+    if (!channelDetails) {
+      setSendError('Cannot send message: channel information is missing');
+      return;
+    }
+    
+    if (serverId && channelDetails.server_id !== serverId) {
+      setSendError('Cannot send message: channel doesn\'t belong to this server');
+      return;
+    }
 
     setIsSending(true);
     setSendError(null);
