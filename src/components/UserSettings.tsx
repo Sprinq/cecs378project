@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
-import { Save, X, User } from 'lucide-react';
+import { Save, X, User, Alert } from 'lucide-react';
 
 export default function UserSettings({ onClose }: { onClose: () => void }) {
   const { session } = useAuthStore();
@@ -11,6 +11,9 @@ export default function UserSettings({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [originalUsername, setOriginalUsername] = useState('');
+  const [originalDisplayName, setOriginalDisplayName] = useState('');
+  const [displayNameAvailable, setDisplayNameAvailable] = useState(true);
+  const [checkingDisplayName, setCheckingDisplayName] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -25,12 +28,46 @@ export default function UserSettings({ onClose }: { onClose: () => void }) {
           setUsername(data.username || '');
           setDisplayName(data.display_name || '');
           setOriginalUsername(data.username || '');
+          setOriginalDisplayName(data.display_name || '');
         }
       }
     };
     
     fetchUserProfile();
   }, [session]);
+
+  useEffect(() => {
+    // Check if display name is available
+    const checkDisplayName = async () => {
+      if (!displayName || displayName === originalDisplayName) {
+        setDisplayNameAvailable(true);
+        return;
+      }
+
+      setCheckingDisplayName(true);
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id')
+          .eq('display_name', displayName)
+          .not('id', 'eq', session?.user?.id)
+          .single();
+          
+        setDisplayNameAvailable(!data);
+      } catch (err) {
+        // If error is "No rows found", it means the display name is available
+        setDisplayNameAvailable(true);
+      } finally {
+        setCheckingDisplayName(false);
+      }
+    };
+
+    // Use debounce to avoid too many database calls
+    const timer = setTimeout(checkDisplayName, 500);
+    
+    return () => clearTimeout(timer);
+  }, [displayName, originalDisplayName, session?.user?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,12 +76,22 @@ export default function UserSettings({ onClose }: { onClose: () => void }) {
     setSuccess(false);
 
     try {
+      // Validate
+      if (!displayNameAvailable) {
+        throw new Error('Display name is already taken');
+      }
+
+      if (!displayName) {
+        throw new Error('Display name is required');
+      }
+
       // Check if username is already taken (if username has changed)
       if (username !== originalUsername) {
         const { data: existingUser } = await supabase
           .from('users')
           .select('id')
           .eq('username', username)
+          .not('id', 'eq', session?.user?.id)
           .single();
 
         if (existingUser) {
@@ -63,11 +110,20 @@ export default function UserSettings({ onClose }: { onClose: () => void }) {
         .eq('id', session?.user?.id);
 
       if (updateError) {
+        // Handle unique constraint violation specifically
+        if (updateError.code === '23505') {
+          if (updateError.message.includes('display_name')) {
+            throw new Error('This display name is already taken');
+          } else {
+            throw new Error('This username is already taken');
+          }
+        }
         throw updateError;
       }
 
       setSuccess(true);
-      setOriginalUsername(username); // Update the original username after successful update
+      setOriginalUsername(username);
+      setOriginalDisplayName(displayName);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -114,15 +170,33 @@ export default function UserSettings({ onClose }: { onClose: () => void }) {
               <label htmlFor="displayName" className="block text-sm font-medium text-gray-300 mb-1">
                 Display Name
               </label>
-              <input
-                id="displayName"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Display Name"
-              />
+              <div className="relative">
+                <input
+                  id="displayName"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className={`w-full px-3 py-2 bg-gray-700 border rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    displayName && !displayNameAvailable 
+                      ? 'border-red-500' 
+                      : 'border-gray-600'
+                  }`}
+                  placeholder="Display Name"
+                  required
+                />
+                {checkingDisplayName && (
+                  <div className="absolute right-3 top-2.5">
+                    <div className="animate-spin h-5 w-5 border-2 border-gray-500 rounded-full border-t-transparent"></div>
+                  </div>
+                )}
+              </div>
+              {displayName && !displayNameAvailable && (
+                <p className="mt-1 text-xs text-red-400 flex items-center">
+                  <Alert className="h-3 w-3 mr-1" />
+                  This display name is already taken
+                </p>
+              )}
               <p className="mt-1 text-xs text-gray-400">
-                How you'll appear to others. This doesn't have to be unique.
+                How you'll appear to others. This must be unique.
               </p>
             </div>
 
@@ -148,8 +222,8 @@ export default function UserSettings({ onClose }: { onClose: () => void }) {
               </button>
               <button
                 type="submit"
-                disabled={loading}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium flex items-center"
+                disabled={loading || (displayName !== originalDisplayName && !displayNameAvailable) || checkingDisplayName}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Saving...' : (
                   <>

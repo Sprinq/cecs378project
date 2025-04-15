@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus } from 'lucide-react';
+import { X, UserPlus, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 
@@ -10,7 +10,8 @@ interface FriendRequestProps {
 
 export default function FriendRequest({ onClose, onSuccess }: FriendRequestProps) {
   const { session } = useAuthStore();
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState('');
+  const [searchType, setSearchType] = useState<'username' | 'display_name'>('username');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -24,15 +25,15 @@ export default function FriendRequest({ onClose, onSuccess }: FriendRequestProps
     setSuccess(false);
 
     try {
-      // Find the user by username
+      // Find the user by username or display name
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('id, username')
-        .eq('username', username)
+        .select('id, username, display_name')
+        .eq(searchType, identifier)
         .single();
 
       if (userError) {
-        throw new Error('User not found');
+        throw new Error(`User not found with this ${searchType.replace('_', ' ')}`);
       }
 
       if (userData.id === session.user.id) {
@@ -107,25 +108,62 @@ export default function FriendRequest({ onClose, onSuccess }: FriendRequestProps
           <form onSubmit={handleSubmit}>
             <div className="space-y-4">
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-1">
-                  Username
+                <div className="flex items-center mb-2">
+                  <span className="block text-sm font-medium text-gray-300 mr-4">
+                    Search by:
+                  </span>
+                  <div className="flex bg-gray-700 rounded-md p-1 space-x-1">
+                    <button
+                      type="button"
+                      onClick={() => setSearchType('username')}
+                      className={`px-3 py-1 text-sm font-medium rounded-md ${
+                        searchType === 'username' 
+                          ? 'bg-indigo-600 text-white' 
+                          : 'text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Username
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSearchType('display_name')}
+                      className={`px-3 py-1 text-sm font-medium rounded-md ${
+                        searchType === 'display_name' 
+                          ? 'bg-indigo-600 text-white' 
+                          : 'text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Display Name
+                    </button>
+                  </div>
+                </div>
+
+                <label htmlFor="identifier" className="block text-sm font-medium text-gray-300 mb-1">
+                  {searchType === 'username' ? 'Username' : 'Display Name'}
                 </label>
                 <input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  id="identifier"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter username"
+                  placeholder={`Enter ${searchType === 'username' ? 'username' : 'display name'}`}
                   required
                 />
                 <p className="mt-1 text-xs text-gray-400">
-                  Enter the exact username of the person you want to add
+                  Enter the exact {searchType === 'username' ? 'username' : 'display name'} of the person you want to add
                 </p>
               </div>
 
               {error && (
-                <div className="text-red-500 text-sm p-2 bg-red-500 bg-opacity-10 rounded">
-                  {error}
+                <div className="text-red-500 text-sm p-2 bg-red-500 bg-opacity-10 rounded flex items-center">
+                  <span className="mr-2">{error}</span>
+                  <button 
+                    type="button"
+                    onClick={() => setError(null)}
+                    className="bg-gray-700 p-1 rounded hover:bg-gray-600"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
                 </div>
               )}
 
