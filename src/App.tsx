@@ -1,12 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Shield, LogOut, User, Settings } from 'lucide-react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { Shield, LogOut, User, Settings, Users, MessageSquare } from 'lucide-react';
 import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import UserSettings from './components/UserSettings';
 import { useAuthStore } from './stores/authStore';
 import { supabase } from './lib/supabase';
+
+// Regular link component instead of NavLink
+function AppNavLink({ to, icon: Icon, label }: { to: string; icon: React.FC<any>; label: string }) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium mr-2"
+    >
+      <Icon className="h-5 w-5 mr-2" />
+      {label}
+    </Link>
+  );
+}
 
 function App() {
   const { session } = useAuthStore();
@@ -46,8 +59,18 @@ function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center">
-                <Shield className="h-8 w-8 text-indigo-500" />
-                <span className="ml-2 text-xl font-bold">SecureChat</span>
+                <Link to="/" className="flex items-center">
+                  <Shield className="h-8 w-8 text-indigo-500" />
+                  <span className="ml-2 text-xl font-bold">SecureChat</span>
+                </Link>
+                
+                {session && (
+                  <div className="ml-10 flex items-center space-x-2">
+                    <AppNavLink to="/dashboard/server" icon={Shield} label="Servers" />
+                    <AppNavLink to="/dashboard/friends" icon={Users} label="Friends" />
+                    <AppNavLink to="/dashboard/dm" icon={MessageSquare} label="Messages" />
+                  </div>
+                )}
               </div>
               
               {session && (
