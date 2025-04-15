@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
-import { Save, X, User, Alert } from 'lucide-react';
+import { Save, X, User, AlertCircle } from 'lucide-react';
 
 export default function UserSettings({ onClose }: { onClose: () => void }) {
   const { session } = useAuthStore();
@@ -191,7 +191,7 @@ export default function UserSettings({ onClose }: { onClose: () => void }) {
               </div>
               {displayName && !displayNameAvailable && (
                 <p className="mt-1 text-xs text-red-400 flex items-center">
-                  <Alert className="h-3 w-3 mr-1" />
+                  <AlertCircle className="h-3 w-3 mr-1" />
                   This display name is already taken
                 </p>
               )}
