@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { supabase, generateKeyPair, exportPublicKey } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import ServerList from './ServerList';
@@ -7,7 +7,6 @@ import ServerView from './ServerView';
 
 export default function Dashboard() {
   const { session } = useAuthStore();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,19 +50,23 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen bg-gray-900">
       <ServerList />
-      <Routes>
-        <Route path="/server/:serverId/*" element={<ServerView />} />
-        <Route
-          path="/"
-          element={
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-gray-400">
-                Select a server or create a new one to get started
-              </div>
-            </div>
-          }
-        />
-      </Routes>
+      <div className="flex flex-col flex-1">
+        <div className="flex-1 overflow-hidden">
+          <Routes>
+            <Route path="/server/:serverId/*" element={<ServerView />} />
+            <Route
+              path="/"
+              element={
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-gray-400">
+                    Select a server or create a new one to get started
+                  </div>
+                </div>
+              }
+            />
+          </Routes>
+        </div>
+      </div>
     </div>
   );
 }
