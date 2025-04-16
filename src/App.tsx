@@ -56,6 +56,31 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-900 text-white">
+        {/* Encryption notification banner */}
+        {session && !sessionStorage.getItem('privateKey') && (
+          <div className="bg-yellow-600 bg-opacity-20 text-yellow-300 text-sm p-2">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+              <div className="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>
+                  End-to-end encryption is not set up for your account. New messages are not encrypted.
+                </span>
+              </div>
+              <button 
+                className="text-yellow-200 underline"
+                onClick={() => {
+                  // This would ideally open a modal or go to a setup page
+                  alert('This would open the encryption setup page in a real application.');
+                }}
+              >
+                Set up encryption
+              </button>
+            </div>
+          </div>
+        )}
+        
         {/* Only show the navbar if not on the invite page */}
         {!window.location.pathname.startsWith('/invite/') && (
           <nav className="bg-gray-800 border-b border-gray-700">

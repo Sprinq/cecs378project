@@ -347,6 +347,14 @@ export default function ChannelView() {
                   <span className="text-xs text-gray-400">
                     {formatTime(message.created_at)}
                   </span>
+                  {message.is_encrypted && (
+                    <span className="ml-2 text-xs bg-indigo-800 text-indigo-200 px-1.5 py-0.5 rounded flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Encrypted
+                    </span>
+                  )}
                 </div>
                 <p className="text-gray-300 mt-1">{message.encrypted_content}</p>
               </div>
@@ -365,13 +373,22 @@ export default function ChannelView() {
           </div>
         )}
         <form onSubmit={handleSendMessage} className="flex items-center">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder={`Message #${channelName}`}
-            className="flex-1 bg-gray-700 text-white placeholder-gray-400 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder={`Message #${channelName}`}
+              className="w-full bg-gray-700 text-white placeholder-gray-400 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            {sessionStorage.getItem('privateKey') && (
+              <div className="absolute right-3 top-2 text-indigo-400" title="Messages will be encrypted">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+            )}
+          </div>
           <button
             type="submit"
             disabled={!newMessage.trim() || isSending}
