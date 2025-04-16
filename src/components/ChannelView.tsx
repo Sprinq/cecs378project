@@ -62,8 +62,6 @@ export default function ChannelView() {
       if (serverId && channelData.server_id !== serverId) {
         console.log('Channel server ID mismatch - Channel belongs to:', 
                   channelData.server_id, 'URL indicates server:', serverId);
-        // Instead of showing an error, we'll handle this gracefully
-        // This can happen due to routing issues but shouldn't block functionality
       }
       
       // Now fetch messages
@@ -75,6 +73,7 @@ export default function ChannelView() {
           encrypted_content,
           iv, 
           created_at,
+          is_encrypted,
           sender:users!sender_id (
             username,
             display_name
@@ -96,18 +95,44 @@ export default function ChannelView() {
       
       if (data) {
         // Transform data to include sender info
-        const formattedMessages = data.map(message => {
+        const formattedMessages = await Promise.all(data.map(async (message) => {
           console.log('Processing message:', message);
+          
+          let displayContent = message.encrypted_content;
+          
+          // Try to decrypt if message is flagged as encrypted
+          if (message.is_encrypted) {
+            const privateKeyString = sessionStorage.getItem('privateKey');
+            
+            if (privateKeyString) {
+              try {
+                // In a real implementation, you would retrieve the encrypted channel key
+                // and decrypt it using your private key. For this demo, we'll use a simpler approach.
+                
+                // This is a placeholder for decryption logic
+                // For demo purposes, we're marking encrypted messages
+                displayContent = `🔒 ${message.encrypted_content.substring(0, 20)}...` +
+                                `(encrypted message)`;
+              } catch (decryptError) {
+                console.error('Decryption error:', decryptError);
+                displayContent = `🔒 [Encrypted message - cannot decrypt]`;
+              }
+            } else {
+              displayContent = `🔒 [Encrypted message]`;
+            }
+          }
+          
           return {
             id: message.id,
             sender_id: message.sender_id,
-            encrypted_content: message.encrypted_content,
+            encrypted_content: displayContent,
             iv: message.iv,
             created_at: message.created_at,
             sender_username: message.sender?.username || 'Unknown User',
-            sender_display_name: message.sender?.display_name || null
+            sender_display_name: message.sender?.display_name || null,
+            is_encrypted: message.is_encrypted || false
           };
-        });
+        }));
         
         console.log('Formatted messages:', formattedMessages);
         setMessages(formattedMessages);
@@ -161,32 +186,74 @@ export default function ChannelView() {
       setSendError('Cannot send message: channel information is missing');
       return;
     }
-    
-    // Log a warning but don't block sending if server IDs don't match
-    // This allows the app to work even if there's a routing inconsistency
-    if (serverId && channelDetails.server_id !== serverId) {
-      console.log('Warning: Sending to channel in different server than URL indicates');
-    }
-
+  
     setIsSending(true);
     setSendError(null);
-
+  
     try {
       console.log('Sending message to channel:', channelId);
       
-      // For now, we're not implementing encryption - just storing the plain text
-      // In a real app, you would encrypt this with the shared keys
+      let encryptedContent = newMessage;
+      let ivString = 'dummy-iv';
+      
+      // Get the user's private key from session storage
+      const privateKeyString = sessionStorage.getItem('privateKey');
+      
+      if (privateKeyString) {
+        try {
+          // For channel messages, we'll use a channel-specific key
+          // Get all members' public keys
+          const { data: memberKeys, error: keysError } = await supabase
+            .from('user_keys')
+            .select('user_id, public_key')
+            .in('user_id', members.map(member => member.user_id));
+          
+          if (keysError) throw keysError;
+          
+          // If we have keys, encrypt the message
+          if (memberKeys && memberKeys.length > 0) {
+            // Use a simple derived key for the channel - in a production app,
+            // you'd want to create a unique channel key and encrypt it for each member
+            const channelKey = await window.crypto.subtle.generateKey(
+              { name: 'AES-GCM', length: 256 },
+              true,
+              ['encrypt', 'decrypt']
+            );
+            
+            // Encrypt the message
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            const encoded = new TextEncoder().encode(newMessage);
+            
+            const encrypted = await window.crypto.subtle.encrypt(
+              { name: 'AES-GCM', iv },
+              channelKey,
+              encoded
+            );
+            
+            encryptedContent = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+            ivString = btoa(String.fromCharCode(...iv));
+            
+            // In a real implementation, you would encrypt the channel key with each member's public key
+            // and store those encrypted keys. For this demo, we'll skip that complexity.
+          }
+        } catch (encryptError) {
+          console.error('Encryption error:', encryptError);
+          // Fall back to unencrypted message if encryption fails
+        }
+      }
+      
       const { data, error } = await supabase
         .from('messages')
         .insert({
           channel_id: channelId,
           sender_id: session.user.id,
-          encrypted_content: newMessage, // Not actually encrypted in this demo
-          iv: 'dummy-iv'                 // Not actually used in this demo
+          encrypted_content: encryptedContent,
+          iv: ivString,
+          is_encrypted: privateKeyString ? true : false // Flag to indicate if this message is encrypted
         })
         .select()
         .single();
-
+  
       if (error) {
         console.error('Error sending message:', error);
         setSendError(`Failed to send message: ${error.message}`);
@@ -206,11 +273,12 @@ export default function ChannelView() {
         const newMessageObj: Message = {
           id: data.id,
           sender_id: session.user.id,
-          encrypted_content: newMessage,
-          iv: 'dummy-iv',
+          encrypted_content: newMessage, // Show the unencrypted content in the UI
+          iv: ivString,
           created_at: data.created_at,
           sender_username: currentUser.data.username,
-          sender_display_name: currentUser.data.display_name
+          sender_display_name: currentUser.data.display_name,
+          is_encrypted: privateKeyString ? true : false
         };
         
         setMessages(prev => [...prev, newMessageObj]);

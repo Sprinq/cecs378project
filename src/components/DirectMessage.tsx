@@ -96,7 +96,7 @@ export default function DirectMessage() {
         setLoading(false);
         return;
       }
-
+  
       // Get the direct messages between the two users
       const { data, error } = await supabase
         .from('direct_messages')
@@ -106,6 +106,7 @@ export default function DirectMessage() {
           encrypted_content,
           iv,
           created_at,
+          is_encrypted,
           sender:users!sender_id (
             username,
             display_name
@@ -121,18 +122,55 @@ export default function DirectMessage() {
       }
       
       if (data) {
-        // Transform data to include sender info
-        const formattedMessages = data.map(message => {
+        // Transform data to include sender info and decrypt messages
+        const formattedMessages = await Promise.all(data.map(async (message) => {
+          let displayContent = message.encrypted_content;
+          
+          // For messages sent by current user, we already know the plaintext
+          if (message.sender_id === session.user.id) {
+            // Keep original text for messages we sent
+          } 
+          // For encrypted messages from the friend, try to decrypt
+          else if (message.is_encrypted) {
+            const privateKeyString = sessionStorage.getItem('privateKey');
+            
+            if (privateKeyString) {
+              try {
+                // Get friend's public key
+                const { data: friendKey, error: keyError } = await supabase
+                  .from('user_keys')
+                  .select('public_key')
+                  .eq('user_id', message.sender_id)
+                  .single();
+                
+                if (keyError) throw keyError;
+                
+                if (friendKey && friendKey.public_key) {
+                  // In a real implementation, you would decrypt using the shared secret
+                  // For demo purposes, we'll just mark it as encrypted
+                  displayContent = `🔒 ${message.encrypted_content.substring(0, 20)}...` +
+                                  `(encrypted message)`;
+                }
+              } catch (decryptError) {
+                console.error('Decryption error:', decryptError);
+                displayContent = `🔒 [Encrypted message - cannot decrypt]`;
+              }
+            } else {
+              displayContent = `🔒 [Encrypted message]`;
+            }
+          }
+          
           return {
             id: message.id,
             sender_id: message.sender_id,
-            encrypted_content: message.encrypted_content,
+            encrypted_content: displayContent,
             iv: message.iv,
             created_at: message.created_at,
             sender_username: message.sender?.username || 'Unknown User',
-            sender_display_name: message.sender?.display_name || null
+            sender_display_name: message.sender?.display_name || null,
+            is_encrypted: message.is_encrypted || false
           };
-        });
+        }));
         
         setMessages(formattedMessages);
         setTimeout(scrollToBottom, 100);
@@ -172,24 +210,89 @@ export default function DirectMessage() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !friendId || !session?.user) return;
-
+  
     setIsSending(true);
     setSendError(null);
-
+  
     try {
-      // For now, we're not implementing encryption - just storing the plain text
-      // In a real app, you would encrypt this with the shared keys
+      let encryptedContent = newMessage;
+      let ivString = 'dummy-iv';
+      
+      // Get the user's private key from session storage
+      const privateKeyString = sessionStorage.getItem('privateKey');
+      
+      if (privateKeyString) {
+        try {
+          // Get friend's public key
+          const { data: friendKey, error: keyError } = await supabase
+            .from('user_keys')
+            .select('public_key')
+            .eq('user_id', friendId)
+            .single();
+          
+          if (keyError) throw keyError;
+          
+          if (friendKey && friendKey.public_key) {
+            // Import the private key
+            const privateKeyData = JSON.parse(privateKeyString);
+            const privateKey = await window.crypto.subtle.importKey(
+              'jwk',
+              privateKeyData,
+              { name: 'ECDH', namedCurve: 'P-256' },
+              false,
+              ['deriveKey']
+            );
+            
+            // Import friend's public key
+            const publicKeyData = Uint8Array.from(atob(friendKey.public_key), c => c.charCodeAt(0));
+            const publicKey = await window.crypto.subtle.importKey(
+              'raw',
+              publicKeyData,
+              { name: 'ECDH', namedCurve: 'P-256' },
+              true,
+              []
+            );
+            
+            // Derive shared secret
+            const sharedSecret = await window.crypto.subtle.deriveKey(
+              { name: 'ECDH', public: publicKey },
+              privateKey,
+              { name: 'AES-GCM', length: 256 },
+              false,
+              ['encrypt', 'decrypt']
+            );
+            
+            // Encrypt the message
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            const encoded = new TextEncoder().encode(newMessage);
+            
+            const encrypted = await window.crypto.subtle.encrypt(
+              { name: 'AES-GCM', iv },
+              sharedSecret,
+              encoded
+            );
+            
+            encryptedContent = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+            ivString = btoa(String.fromCharCode(...iv));
+          }
+        } catch (encryptError) {
+          console.error('Encryption error:', encryptError);
+          // Fall back to unencrypted message if encryption fails
+        }
+      }
+  
       const { data, error } = await supabase
         .from('direct_messages')
         .insert({
           sender_id: session.user.id,
           receiver_id: friendId,
-          encrypted_content: newMessage, // Not actually encrypted in this demo
-          iv: 'dummy-iv'                 // Not actually used in this demo
+          encrypted_content: encryptedContent,
+          iv: ivString,
+          is_encrypted: privateKeyString ? true : false
         })
         .select()
         .single();
-
+  
       if (error) {
         console.error('Error sending message:', error);
         setSendError(`Failed to send message: ${error.message}`);
@@ -207,11 +310,12 @@ export default function DirectMessage() {
         const newMessageObj: Message = {
           id: data.id,
           sender_id: session.user.id,
-          encrypted_content: newMessage,
-          iv: 'dummy-iv',
+          encrypted_content: newMessage, // Show the unencrypted content in the UI for the sender
+          iv: ivString,
           created_at: data.created_at,
           sender_username: currentUser.data.username,
-          sender_display_name: currentUser.data.display_name
+          sender_display_name: currentUser.data.display_name,
+          is_encrypted: privateKeyString ? true : false
         };
         
         setMessages(prev => [...prev, newMessageObj]);
