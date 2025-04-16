@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { Send, AlertCircle, RefreshCw } from 'lucide-react';
+import { encryptChannelMessage, decryptChannelMessage } from '../services/encryptionService';
 
 interface Message {
   id: string;
@@ -102,23 +103,15 @@ export default function ChannelView() {
           
           // Try to decrypt if message is flagged as encrypted
           if (message.is_encrypted) {
-            const privateKeyString = sessionStorage.getItem('privateKey');
-            
-            if (privateKeyString) {
-              try {
-                // In a real implementation, you would retrieve the encrypted channel key
-                // and decrypt it using your private key. For this demo, we'll use a simpler approach.
-                
-                // This is a placeholder for decryption logic
-                // For demo purposes, we're marking encrypted messages
-                displayContent = `🔒 ${message.encrypted_content.substring(0, 20)}...` +
-                                `(encrypted message)`;
-              } catch (decryptError) {
-                console.error('Decryption error:', decryptError);
-                displayContent = `🔒 [Encrypted message - cannot decrypt]`;
-              }
-            } else {
-              displayContent = `🔒 [Encrypted message]`;
+            try {
+              displayContent = await decryptChannelMessage(
+                message.channel_id, 
+                message.encrypted_content, 
+                message.iv
+              );
+            } catch (decryptError) {
+              console.error('Decryption error:', decryptError);
+              displayContent = `🔒 [Encrypted message - cannot decrypt]`;
             }
           }
           
@@ -193,54 +186,9 @@ export default function ChannelView() {
     try {
       console.log('Sending message to channel:', channelId);
       
-      let encryptedContent = newMessage;
-      let ivString = 'dummy-iv';
-      
-      // Get the user's private key from session storage
-      const privateKeyString = sessionStorage.getItem('privateKey');
-      
-      if (privateKeyString) {
-        try {
-          // For channel messages, we'll use a channel-specific key
-          // Get all members' public keys
-          const { data: memberKeys, error: keysError } = await supabase
-            .from('user_keys')
-            .select('user_id, public_key')
-            .in('user_id', members.map(member => member.user_id));
-          
-          if (keysError) throw keysError;
-          
-          // If we have keys, encrypt the message
-          if (memberKeys && memberKeys.length > 0) {
-            // Use a simple derived key for the channel - in a production app,
-            // you'd want to create a unique channel key and encrypt it for each member
-            const channelKey = await window.crypto.subtle.generateKey(
-              { name: 'AES-GCM', length: 256 },
-              true,
-              ['encrypt', 'decrypt']
-            );
-            
-            // Encrypt the message
-            const iv = window.crypto.getRandomValues(new Uint8Array(12));
-            const encoded = new TextEncoder().encode(newMessage);
-            
-            const encrypted = await window.crypto.subtle.encrypt(
-              { name: 'AES-GCM', iv },
-              channelKey,
-              encoded
-            );
-            
-            encryptedContent = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
-            ivString = btoa(String.fromCharCode(...iv));
-            
-            // In a real implementation, you would encrypt the channel key with each member's public key
-            // and store those encrypted keys. For this demo, we'll skip that complexity.
-          }
-        } catch (encryptError) {
-          console.error('Encryption error:', encryptError);
-          // Fall back to unencrypted message if encryption fails
-        }
-      }
+      // Encrypt the message content
+      const { encrypted: encryptedContent, iv: ivString, isEncrypted } = 
+        await encryptChannelMessage(channelId, newMessage);
       
       const { data, error } = await supabase
         .from('messages')
@@ -249,7 +197,7 @@ export default function ChannelView() {
           sender_id: session.user.id,
           encrypted_content: encryptedContent,
           iv: ivString,
-          is_encrypted: privateKeyString ? true : false // Flag to indicate if this message is encrypted
+          is_encrypted: isEncrypted
         })
         .select()
         .single();
@@ -278,7 +226,7 @@ export default function ChannelView() {
           created_at: data.created_at,
           sender_username: currentUser.data.username,
           sender_display_name: currentUser.data.display_name,
-          is_encrypted: privateKeyString ? true : false
+          is_encrypted: isEncrypted
         };
         
         setMessages(prev => [...prev, newMessageObj]);

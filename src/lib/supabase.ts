@@ -22,6 +22,21 @@ export async function exportPublicKey(key: CryptoKey): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(exported)));
 }
 
+export async function exportKey(key: CryptoKey): Promise<JsonWebKey> {
+  return await window.crypto.subtle.exportKey('jwk', key);
+}
+
+export async function savePrivateKey(privateKey: CryptoKey, password: string): Promise<boolean> {
+  try {
+    const keyData = await exportKey(privateKey);
+    sessionStorage.setItem('privateKey', JSON.stringify(keyData));
+    return true;
+  } catch (err) {
+    console.error('Error saving private key:', err);
+    return false;
+  }
+}
+
 export async function deriveSharedKey(privateKey: CryptoKey, publicKeyBase64: string): Promise<CryptoKey> {
   const publicKeyData = Uint8Array.from(atob(publicKeyBase64), c => c.charCodeAt(0));
   const publicKey = await window.crypto.subtle.importKey(

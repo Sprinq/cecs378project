@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
-import { supabase, generateKeyPair, exportPublicKey } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import ServerList from './ServerList';
 import ServerView from './ServerView';
@@ -8,6 +8,7 @@ import Friends from './Friends';
 import DirectMessagesList from './DirectMessagesList';
 import DirectMessage from './DirectMessage';
 import Welcome from './Welcome';
+import { migrateExistingMessages } from '../services/encryptionService';
 
 export default function Dashboard() {
   const { session } = useAuthStore();
@@ -15,28 +16,48 @@ export default function Dashboard() {
   const location = useLocation();
 
   useEffect(() => {
-    const setupUserKeys = async () => {
-      if (!session?.user) return;
+    const initDashboard = async () => {
+      if (!session?.user) {
+        setLoading(false);
+        return;
+      }
 
       try {
-        const { data: existingKey } = await supabase
-          .from('user_keys')
-          .select('public_key')
-          .eq('user_id', session.user.id)
-          .single();
+        // Don't check for migration flag yet - just ensure keys exist
+        const privateKeyString = sessionStorage.getItem('privateKey');
+        if (!privateKeyString) {
+          // Try to get the user's keys
+          const { data: existingKey } = await supabase
+            .from('user_keys')
+            .select('public_key')
+            .eq('user_id', session.user.id)
+            .single();
 
-        if (!existingKey) {
-          const keyPair = await generateKeyPair();
-          const publicKeyString = await exportPublicKey(keyPair.publicKey);
-
-          await supabase.from('user_keys').insert({
-            user_id: session.user.id,
-            public_key: publicKeyString,
-          });
-
-          // Store private key securely in memory
-          // In a production app, you might want to encrypt this with a user-provided password
-          sessionStorage.setItem('privateKey', JSON.stringify(await exportPublicKey(keyPair.privateKey)));
+          if (!existingKey) {
+            // Generate a new key pair
+            console.log('Generating new key pair for user');
+            const keyPair = await window.crypto.subtle.generateKey(
+              { name: 'ECDH', namedCurve: 'P-256' },
+              true,
+              ['deriveKey']
+            );
+            
+            // Export the public key
+            const exported = await window.crypto.subtle.exportKey('raw', keyPair.publicKey);
+            const publicKeyString = btoa(String.fromCharCode(...new Uint8Array(exported)));
+            
+            // Export the private key
+            const privateKeyExported = await window.crypto.subtle.exportKey('jwk', keyPair.privateKey);
+            
+            // Store public key in database
+            await supabase.from('user_keys').insert({
+              user_id: session.user.id,
+              public_key: publicKeyString,
+            });
+            
+            // Store private key in session storage
+            sessionStorage.setItem('privateKey', JSON.stringify(privateKeyExported));
+          }
         }
       } catch (error) {
         console.error("Error setting up user keys:", error);
@@ -45,7 +66,7 @@ export default function Dashboard() {
       setLoading(false);
     };
 
-    setupUserKeys();
+    initDashboard();
   }, [session]);
 
   if (loading) {
