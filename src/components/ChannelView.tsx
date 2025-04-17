@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
-import { Send, AlertCircle, RefreshCw } from 'lucide-react';
-import { encryptChannelMessage, decryptChannelMessage } from '../services/encryptionService';
+import { Send, AlertCircle, RefreshCw, Lock } from 'lucide-react';
+import { encryptMessage, decryptMessage } from '../services/serverEncryptionService';
 
 interface Message {
   id: string;
@@ -13,6 +13,7 @@ interface Message {
   created_at: string;
   sender_username: string;
   sender_display_name: string | null;
+  is_encrypted: boolean;
 }
 
 export default function ChannelView() {
@@ -26,7 +27,7 @@ export default function ChannelView() {
   const { session } = useAuthStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [channelName, setChannelName] = useState('');
-  const [channelDetails, setChannelDetails] = useState<{ id: string, server_id: string } | null>(null);
+  const [channelDetails, setChannelDetails] = useState<{ id: string, server_id: string, encryption_enabled: boolean } | null>(null);
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -45,7 +46,7 @@ export default function ChannelView() {
       // First, validate that this channel belongs to the current server
       const { data: channelData, error: channelError } = await supabase
         .from('channels')
-        .select('id, server_id, name')
+        .select('id, server_id, name, encryption_enabled')
         .eq('id', channelId)
         .single();
         
@@ -75,6 +76,7 @@ export default function ChannelView() {
           iv, 
           created_at,
           is_encrypted,
+          encryption_version,
           sender:users!sender_id (
             username,
             display_name
@@ -104,8 +106,8 @@ export default function ChannelView() {
           // Try to decrypt if message is flagged as encrypted
           if (message.is_encrypted) {
             try {
-              displayContent = await decryptChannelMessage(
-                message.channel_id, 
+              displayContent = await decryptMessage(
+                channelId, 
                 message.encrypted_content, 
                 message.iv
               );
@@ -186,9 +188,18 @@ export default function ChannelView() {
     try {
       console.log('Sending message to channel:', channelId);
       
-      // Encrypt the message content
-      const { encrypted: encryptedContent, iv: ivString, isEncrypted } = 
-        await encryptChannelMessage(channelId, newMessage);
+      let encryptedContent = newMessage;
+      let ivString = 'unencrypted';
+      let isEncrypted = false;
+      
+      // Only encrypt if the channel has encryption enabled
+      if (channelDetails.encryption_enabled) {
+        // Encrypt the message content using server-side encryption
+        const encryptResult = await encryptMessage(channelId, newMessage);
+        encryptedContent = encryptResult.encrypted;
+        ivString = encryptResult.iv;
+        isEncrypted = ivString !== 'unencrypted';
+      }
       
       const { data, error } = await supabase
         .from('messages')
@@ -197,7 +208,8 @@ export default function ChannelView() {
           sender_id: session.user.id,
           encrypted_content: encryptedContent,
           iv: ivString,
-          is_encrypted: isEncrypted
+          is_encrypted: isEncrypted,
+          encryption_version: 2 // Mark as using the new server-side encryption
         })
         .select()
         .single();
@@ -257,6 +269,14 @@ export default function ChannelView() {
         </div>
         <h3 className="font-medium text-white">{channelName}</h3>
         
+        {/* Show encryption status */}
+        {channelDetails?.encryption_enabled && (
+          <div className="ml-2 flex items-center text-green-400 text-xs">
+            <Lock className="h-3 w-3 mr-1" />
+            <span>Encrypted</span>
+          </div>
+        )}
+        
         {error && (
           <div className="ml-auto flex items-center text-red-400 text-sm">
             <AlertCircle className="h-4 w-4 mr-1" />
@@ -295,6 +315,12 @@ export default function ChannelView() {
                   <span className="text-xs text-gray-400">
                     {formatTime(message.created_at)}
                   </span>
+                  {message.is_encrypted && (
+                    <span className="ml-2 text-xs text-green-400 flex items-center">
+                      <Lock className="h-3 w-3 mr-1" />
+                      Encrypted
+                    </span>
+                  )}
                 </div>
                 <p className="text-gray-300 mt-1">{message.encrypted_content}</p>
               </div>
@@ -317,7 +343,7 @@ export default function ChannelView() {
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder={`Message #${channelName}`}
+            placeholder={`Message #${channelName}${channelDetails?.encryption_enabled ? ' (encrypted)' : ''}`}
             className="flex-1 bg-gray-700 text-white placeholder-gray-400 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button

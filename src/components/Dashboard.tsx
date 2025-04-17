@@ -8,7 +8,6 @@ import Friends from './Friends';
 import DirectMessagesList from './DirectMessagesList';
 import DirectMessage from './DirectMessage';
 import Welcome from './Welcome';
-import { migrateExistingMessages } from '../services/encryptionService';
 
 export default function Dashboard() {
   const { session } = useAuthStore();
@@ -23,44 +22,30 @@ export default function Dashboard() {
       }
 
       try {
-        // Don't check for migration flag yet - just ensure keys exist
-        const privateKeyString = sessionStorage.getItem('privateKey');
-        if (!privateKeyString) {
-          // Try to get the user's keys
-          const { data: existingKey } = await supabase
-            .from('user_keys')
-            .select('public_key')
-            .eq('user_id', session.user.id)
-            .single();
-
-          if (!existingKey) {
-            // Generate a new key pair
-            console.log('Generating new key pair for user');
-            const keyPair = await window.crypto.subtle.generateKey(
-              { name: 'ECDH', namedCurve: 'P-256' },
-              true,
-              ['deriveKey']
-            );
-            
-            // Export the public key
-            const exported = await window.crypto.subtle.exportKey('raw', keyPair.publicKey);
-            const publicKeyString = btoa(String.fromCharCode(...new Uint8Array(exported)));
-            
-            // Export the private key
-            const privateKeyExported = await window.crypto.subtle.exportKey('jwk', keyPair.privateKey);
-            
-            // Store public key in database
-            await supabase.from('user_keys').insert({
-              user_id: session.user.id,
-              public_key: publicKeyString,
+        // Check if user exists in our database
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('id, username, display_name')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (userError) {
+          console.error("Error checking user:", userError);
+          // User might not exist, attempt to create profile
+          const { error: createError } = await supabase
+            .from('users')
+            .insert({
+              id: session.user.id,
+              username: session.user.email,
+              display_name: session.user.email?.split('@')[0]
             });
             
-            // Store private key in session storage
-            sessionStorage.setItem('privateKey', JSON.stringify(privateKeyExported));
+          if (createError) {
+            console.error("Error creating user profile:", createError);
           }
         }
       } catch (error) {
-        console.error("Error setting up user keys:", error);
+        console.error("Error in dashboard init:", error);
       }
 
       setLoading(false);

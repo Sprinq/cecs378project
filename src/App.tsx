@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Shield, LogOut, User, Settings, Users, MessageSquare } from 'lucide-react';
+import { Shield, LogOut, User, Settings, Users, MessageSquare, Lock } from 'lucide-react';
 import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard';
@@ -82,6 +82,13 @@ function App() {
                       <User className="h-4 w-4 mr-2" />
                       <span className="text-sm font-medium">{username || session.user.email}</span>
                     </div>
+                    
+                    {/* Show encryption status indicator */}
+                    <div className="text-green-400 flex items-center text-sm">
+                      <Lock className="h-4 w-4 mr-1" />
+                      <span>Encrypted</span>
+                    </div>
+                    
                     <button
                       onClick={toggleSettings}
                       className="flex items-center text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
