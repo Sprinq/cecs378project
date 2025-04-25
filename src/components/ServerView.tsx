@@ -5,6 +5,7 @@ import { Hash, Users, Settings, Link as LinkIcon, Trash, MoreVertical } from 'lu
 import ChannelView from './ChannelView';
 import ServerInvite from './ServerInvite';
 import DeleteServerModal from './DeleteServerModal';
+import TemporaryAccessBanner from './TemporaryAccessBanner';
 import { useAuthStore } from '../stores/authStore';
 
 interface Server {
@@ -25,6 +26,8 @@ interface ServerMember {
   username: string;
   display_name: string | null;
   role: string;
+  temporary_access?: boolean;
+  access_expires_at?: string | null;
 }
 
 export default function ServerView() {
@@ -39,6 +42,8 @@ export default function ServerView() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showServerMenu, setShowServerMenu] = useState(false);
   const [userRole, setUserRole] = useState<string>('member');
+  const [temporaryAccess, setTemporaryAccess] = useState<boolean>(false);
+  const [accessExpiresAt, setAccessExpiresAt] = useState<string | null>(null);
   const { session } = useAuthStore();
   const navigate = useNavigate();
 
@@ -97,6 +102,8 @@ export default function ServerView() {
           .select(`
             user_id,
             role,
+            temporary_access,
+            access_expires_at,
             users (
               username,
               display_name
@@ -111,12 +118,14 @@ export default function ServerView() {
           user_id: member.user_id,
           username: member.users.username,
           display_name: member.users.display_name,
-          role: member.role
+          role: member.role,
+          temporary_access: member.temporary_access,
+          access_expires_at: member.access_expires_at
         })) || [];
         
         setMembers(formattedMembers);
 
-        // Get the current user's role
+        // Get the current user's role and temporary access status
         if (session?.user) {
           const currentUserMember = membersData?.find(member => 
             member.user_id === session.user.id
@@ -125,6 +134,13 @@ export default function ServerView() {
           if (currentUserMember) {
             console.log("Found member role:", currentUserMember.role);
             setUserRole(currentUserMember.role);
+            
+            // Set temporary access information if applicable
+            if (currentUserMember.temporary_access) {
+              console.log("User has temporary access, expires at:", currentUserMember.access_expires_at);
+              setTemporaryAccess(true);
+              setAccessExpiresAt(currentUserMember.access_expires_at);
+            }
           }
         }
       } catch (err) {
@@ -228,126 +244,138 @@ export default function ServerView() {
   }
 
   return (
-    <div className="flex h-full">
-      {/* Channels sidebar */}
-      <div className="w-64 bg-gray-800 p-4 flex flex-col h-full">
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-1">
-            <h3 className="font-semibold text-xl text-white">{server.name}</h3>
-            <div className="flex items-center">
-              {/* Invite button */}
-              {(canInvite || isServerOwner) && (
-                <button 
-                  onClick={() => setShowInviteModal(true)}
-                  className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700 mr-1"
-                  title="Invite People"
-                >
-                  <LinkIcon className="h-4 w-4" />
-                </button>
-              )}
-              
-              {/* Server settings button */}
-              {isServerOwner && (
-                <div className="relative">
+    <div className="flex flex-col h-full">
+      {/* Temporary access banner - show at the top of the page */}
+      {temporaryAccess && (
+        <TemporaryAccessBanner expiresAt={accessExpiresAt} />
+      )}
+      
+      <div className="flex flex-1 h-0">
+        {/* Channels sidebar */}
+        <div className="w-64 bg-gray-800 p-4 flex flex-col h-full">
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="font-semibold text-xl text-white">{server.name}</h3>
+              <div className="flex items-center">
+                {/* Invite button */}
+                {(canInvite || isServerOwner) && (
                   <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowServerMenu(!showServerMenu);
-                    }}
-                    className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
-                    title="Server Settings"
+                    onClick={() => setShowInviteModal(true)}
+                    className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700 mr-1"
+                    title="Invite People"
                   >
-                    <MoreVertical className="h-4 w-4" />
+                    <LinkIcon className="h-4 w-4" />
                   </button>
-                  
-                  {/* Server settings dropdown */}
-                  {showServerMenu && (
-                    <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
-                      {/* Delete server option */}
-                      <button 
-                        onClick={() => {
-                          setShowServerMenu(false);
-                          setShowDeleteModal(true);
-                        }}
-                        className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
-                      >
-                        <Trash className="h-4 w-4 mr-2" />
-                        Delete Server
-                      </button>
-                    </div>
-                  )}
+                )}
+                
+                {/* Server settings button */}
+                {isServerOwner && (
+                  <div className="relative">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowServerMenu(!showServerMenu);
+                      }}
+                      className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
+                      title="Server Settings"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                    
+                    {/* Server settings dropdown */}
+                    {showServerMenu && (
+                      <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
+                        {/* Delete server option */}
+                        <button 
+                          onClick={() => {
+                            setShowServerMenu(false);
+                            setShowDeleteModal(true);
+                          }}
+                          className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
+                        >
+                          <Trash className="h-4 w-4 mr-2" />
+                          Delete Server
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            {server.description && (
+              <p className="text-sm text-gray-400">{server.description}</p>
+            )}
+          </div>
+          
+          <div className="mb-4">
+            <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 px-2">Channels</h4>
+            <div className="space-y-1">
+              {channels.map(channel => (
+                <div 
+                  key={channel.id}
+                  className={`flex items-center px-2 py-1 ${
+                    selectedChannelId === channel.id 
+                      ? 'bg-gray-700 text-white' 
+                      : 'text-gray-300 hover:bg-gray-700'
+                  } rounded cursor-pointer`}
+                  onClick={() => handleChannelClick(channel.id)}
+                >
+                  <Hash className="h-4 w-4 mr-2 text-gray-400" />
+                  <span>{channel.name}</span>
                 </div>
-              )}
+              ))}
             </div>
           </div>
-          {server.description && (
-            <p className="text-sm text-gray-400">{server.description}</p>
-          )}
         </div>
-        
-        <div className="mb-4">
-          <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 px-2">Channels</h4>
-          <div className="space-y-1">
-            {channels.map(channel => (
+
+        {/* Main content area */}
+        <div className="flex-1 bg-gray-900">
+          <Routes>
+            <Route 
+              path="/channel/:channelId" 
+              element={<ChannelView />} 
+            />
+            <Route 
+              path="*" 
+              element={
+                <div className="p-4">
+                  <h2 className="text-2xl font-semibold mb-4 text-white">Welcome to {server.name}</h2>
+                  <p className="text-gray-400">
+                    Select a channel to start chatting!
+                  </p>
+                </div>
+              } 
+            />
+          </Routes>
+        </div>
+
+        {/* Members sidebar */}
+        <div className="w-56 bg-gray-800 p-4">
+          <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 flex items-center">
+            <Users className="h-3 w-3 mr-1" />
+            Members ({members.length})
+          </h4>
+          <div className="space-y-2">
+            {members.map(member => (
               <div 
-                key={channel.id}
-                className={`flex items-center px-2 py-1 ${
-                  selectedChannelId === channel.id 
-                    ? 'bg-gray-700 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700'
-                } rounded cursor-pointer`}
-                onClick={() => handleChannelClick(channel.id)}
+                key={member.user_id}
+                className="flex items-center text-gray-300"
               >
-                <Hash className="h-4 w-4 mr-2 text-gray-400" />
-                <span>{channel.name}</span>
+                <div className="w-8 h-8 rounded-full bg-gray-700 mr-2 flex items-center justify-center uppercase text-xs">
+                  {(member.display_name || member.username).charAt(0)}
+                </div>
+                <div>
+                  <div className="text-sm">
+                    {member.display_name || member.username}
+                    {member.temporary_access && (
+                      <span className="ml-2 text-xs text-yellow-400">(temp)</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-400">{member.role}</div>
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Main content area */}
-      <div className="flex-1 bg-gray-900">
-        <Routes>
-          <Route 
-            path="/channel/:channelId" 
-            element={<ChannelView />} 
-          />
-          <Route 
-            path="*" 
-            element={
-              <div className="p-4">
-                <h2 className="text-2xl font-semibold mb-4 text-white">Welcome to {server.name}</h2>
-                <p className="text-gray-400">
-                  Select a channel to start chatting!
-                </p>
-              </div>
-            } 
-          />
-        </Routes>
-      </div>
-
-      {/* Members sidebar */}
-      <div className="w-56 bg-gray-800 p-4">
-        <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 flex items-center">
-          <Users className="h-3 w-3 mr-1" />
-          Members ({members.length})
-        </h4>
-        <div className="space-y-2">
-          {members.map(member => (
-            <div 
-              key={member.user_id}
-              className="flex items-center text-gray-300"
-            >
-              <div className="w-8 h-8 rounded-full bg-gray-700 mr-2 flex items-center justify-center uppercase text-xs">
-                {(member.display_name || member.username).charAt(0)}
-              </div>
-              <div>
-                <div className="text-sm">{member.display_name || member.username}</div>
-                <div className="text-xs text-gray-400">{member.role}</div>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 

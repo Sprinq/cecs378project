@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Shield, AlertCircle, Loader, Clock, Calendar, Eye, EyeOff } from 'lucide-react';
+import { Shield, AlertCircle, Loader, Clock, Calendar, Eye, EyeOff, Timer } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 
@@ -19,6 +19,7 @@ export default function JoinServer() {
     expiresAt?: string;
     usesLeft?: number;
   } | null>(null);
+  const [expiryTime, setExpiryTime] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Check if the invite code is valid
@@ -35,7 +36,7 @@ export default function JoinServer() {
         // First, check the new server_invites table
         const { data: inviteData, error: inviteError } = await supabase
           .from('server_invites')
-          .select('server_id, server:servers(id, name), hide_history, temporary_access, temporary_duration, expires_at, max_uses, uses')
+          .select('server_id, server:servers(id, name), hide_history, temporary_access, temporary_duration, raw_temporary_duration, expires_at, max_uses, uses')
           .eq('code', inviteCode)
           .single();
         
@@ -55,7 +56,7 @@ export default function JoinServer() {
           // Check if user is already a member
           const { data: memberData, error: memberError } = await supabase
             .from('server_members')
-            .select('user_id')
+            .select('user_id, temporary_access, access_expires_at')
             .eq('server_id', inviteData.server.id)
             .eq('user_id', session.user.id)
             .maybeSingle();
@@ -65,9 +66,44 @@ export default function JoinServer() {
           }
 
           if (memberData) {
-            // User is already a member, redirect to server
+            // User is already a member
             console.log("User is already a member, redirecting...");
-            navigate(`/dashboard/server/${inviteData.server.id}`);
+            
+            // If they have temporary access, show when it expires
+            if (memberData.temporary_access && memberData.access_expires_at) {
+              const expiry = new Date(memberData.access_expires_at);
+              const now = new Date();
+              
+              // Calculate time remaining
+              const timeRemaining = Math.max(0, Math.floor((expiry.getTime() - now.getTime()) / 1000));
+              
+              if (timeRemaining > 0) {
+                // Format the expiry time
+                const days = Math.floor(timeRemaining / 86400);
+                const hours = Math.floor((timeRemaining % 86400) / 3600);
+                const minutes = Math.floor((timeRemaining % 3600) / 60);
+                
+                let expiryString = '';
+                if (days > 0) {
+                  expiryString = `${days} day${days !== 1 ? 's' : ''}`;
+                } else if (hours > 0) {
+                  expiryString = `${hours} hour${hours !== 1 ? 's' : ''}`;
+                } else {
+                  expiryString = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+                }
+                
+                setExpiryTime(`Your temporary access expires in ${expiryString}`);
+              } else {
+                // Access has expired but they're still in the database
+                // (They'll be removed soon by the cleanup function)
+                setExpiryTime("Your temporary access has expired");
+              }
+            }
+            
+            // Still redirect to the server after a short delay
+            setTimeout(() => {
+              navigate(`/dashboard/server/${inviteData.server.id}`);
+            }, 2000);
             return;
           }
           
@@ -76,7 +112,7 @@ export default function JoinServer() {
             name: inviteData.server.name,
             hideHistory: inviteData.hide_history,
             temporaryAccess: inviteData.temporary_access,
-            temporaryDuration: inviteData.temporary_duration,
+            temporaryDuration: inviteData.raw_temporary_duration || inviteData.temporary_duration,
             expiresAt: inviteData.expires_at,
             usesLeft: inviteData.max_uses ? (inviteData.max_uses - inviteData.uses) : undefined
           });
@@ -105,7 +141,7 @@ export default function JoinServer() {
         // Check if the user is already a member
         const { data: memberData, error: memberError } = await supabase
           .from('server_members')
-          .select('user_id')
+          .select('user_id, temporary_access, access_expires_at')
           .eq('server_id', serverData.id)
           .eq('user_id', session.user.id)
           .maybeSingle();
@@ -117,7 +153,40 @@ export default function JoinServer() {
         if (memberData) {
           // User is already a member, redirect to server
           console.log("User is already a member, redirecting...");
-          navigate(`/dashboard/server/${serverData.id}`);
+          
+          // If they have temporary access, show when it expires
+          if (memberData.temporary_access && memberData.access_expires_at) {
+            const expiry = new Date(memberData.access_expires_at);
+            const now = new Date();
+            
+            // Calculate time remaining
+            const timeRemaining = Math.max(0, Math.floor((expiry.getTime() - now.getTime()) / 1000));
+            
+            if (timeRemaining > 0) {
+              // Format the expiry time
+              const days = Math.floor(timeRemaining / 86400);
+              const hours = Math.floor((timeRemaining % 86400) / 3600);
+              const minutes = Math.floor((timeRemaining % 3600) / 60);
+              
+              let expiryString = '';
+              if (days > 0) {
+                expiryString = `${days} day${days !== 1 ? 's' : ''}`;
+              } else if (hours > 0) {
+                expiryString = `${hours} hour${hours !== 1 ? 's' : ''}`;
+              } else {
+                expiryString = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+              }
+              
+              setExpiryTime(`Your temporary access expires in ${expiryString}`);
+            } else {
+              setExpiryTime("Your temporary access has expired");
+            }
+          }
+          
+          // Still redirect after a short delay
+          setTimeout(() => {
+            navigate(`/dashboard/server/${serverData.id}`);
+          }, 2000);
           return;
         }
 
@@ -165,11 +234,23 @@ export default function JoinServer() {
         }
         
         console.log("Join server successful (old method), server ID:", oldData);
+        
+        // Check if this was a temporary membership
+        if (serverDetails.temporaryAccess) {
+          alert(`You now have temporary access to the server for ${formatDuration(serverDetails.temporaryDuration)}. You will be automatically removed after this period.`);
+        }
+        
         navigate(`/dashboard/server/${oldData}`);
         return;
       }
 
       console.log("Join server successful (new method), server ID:", data);
+      
+      // Check if this was a temporary membership and show a notification
+      if (serverDetails.temporaryAccess) {
+        alert(`You now have temporary access to the server for ${formatDuration(serverDetails.temporaryDuration)}. You will be automatically removed after this period.`);
+      }
+      
       navigate(`/dashboard/server/${data}`);
     } catch (err) {
       console.error("Error joining server:", err);
@@ -198,7 +279,8 @@ export default function JoinServer() {
           role: 'member',
           hide_history: serverDetails.hideHistory || false,
           temporary_access: serverDetails.temporaryAccess || false,
-          temporary_duration: serverDetails.temporaryDuration
+          temporary_duration: serverDetails.temporaryDuration,
+          joined_at: new Date().toISOString()
         });
         
       if (error) {
@@ -212,6 +294,12 @@ export default function JoinServer() {
       }
       
       console.log("Manual join successful");
+      
+      // Check if this was a temporary membership
+      if (serverDetails.temporaryAccess) {
+        alert(`You now have temporary access to the server for ${formatDuration(serverDetails.temporaryDuration)}. You will be automatically removed after this period.`);
+      }
+      
       navigate(`/dashboard/server/${serverDetails.id}`);
     } catch (err) {
       console.error("Error in manual join:", err);
@@ -266,6 +354,21 @@ export default function JoinServer() {
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center">
         <Loader className="h-12 w-12 text-indigo-500 animate-spin mb-4" />
         <p className="text-gray-400">Verifying invite...</p>
+      </div>
+    );
+  }
+
+  // If we have an expiry time to show, render a redirecting message
+  if (expiryTime) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4 text-center">
+        <Shield className="h-16 w-16 text-indigo-500 mb-6" />
+        <h1 className="text-2xl font-bold text-white mb-2">You're Already a Member</h1>
+        <p className="text-gray-400 mb-2">Redirecting you to the server...</p>
+        <div className="bg-gray-800 p-4 rounded-md text-yellow-400 flex items-center mb-6">
+          <Timer className="h-5 w-5 mr-2" />
+          <span>{expiryTime}</span>
+        </div>
       </div>
     );
   }
@@ -331,6 +434,19 @@ export default function JoinServer() {
                 <span>{serverDetails.usesLeft} uses remaining</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      
+      {/* Add a warning for temporary access */}
+      {serverDetails?.temporaryAccess && (
+        <div className="mb-6 bg-yellow-900 bg-opacity-20 p-4 rounded-md max-w-sm border border-yellow-800">
+          <div className="flex items-center text-yellow-300">
+            <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+            <span>
+              Your access to this server will automatically expire after {formatDuration(serverDetails.temporaryDuration)}.
+              You will be removed from the server at that time.
+            </span>
           </div>
         </div>
       )}
