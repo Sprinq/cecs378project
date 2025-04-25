@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Routes, Route } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Hash, Users, Settings, Link as LinkIcon, Trash, MoreVertical } from 'lucide-react';
+import { Hash, Users, Settings, Link as LinkIcon, Trash, MoreVertical, UserX } from 'lucide-react';
 import ChannelView from './ChannelView';
 import ServerInvite from './ServerInvite';
 import DeleteServerModal from './DeleteServerModal';
+import KickMemberModal from './KickMemberModal';
 import TemporaryAccessBanner from './TemporaryAccessBanner';
 import { useAuthStore } from '../stores/authStore';
 
@@ -44,6 +45,7 @@ export default function ServerView() {
   const [userRole, setUserRole] = useState<string>('member');
   const [temporaryAccess, setTemporaryAccess] = useState<boolean>(false);
   const [accessExpiresAt, setAccessExpiresAt] = useState<string | null>(null);
+  const [memberToKick, setMemberToKick] = useState<ServerMember | null>(null);
   const { session } = useAuthStore();
   const navigate = useNavigate();
 
@@ -207,8 +209,18 @@ export default function ServerView() {
     setSelectedChannelId(channelId);
   };
 
+  const handleKickMember = (member: ServerMember) => {
+    setMemberToKick(member);
+  };
+
+  const handleKickSuccess = () => {
+    setMemberToKick(null);
+    // The real-time subscription will update the members list
+  };
+
   // Check if user is admin or owner
   const canInvite = userRole === 'owner' || userRole === 'admin';
+  const canKick = userRole === 'owner' || userRole === 'admin';
   
   // Alternative check - if server exists and current user is the owner
   const isServerOwner = server && session?.user && server.owner_id === session.user.id;
@@ -359,20 +371,35 @@ export default function ServerView() {
             {members.map(member => (
               <div 
                 key={member.user_id}
-                className="flex items-center text-gray-300"
+                className="flex items-center justify-between text-gray-300 group"
               >
-                <div className="w-8 h-8 rounded-full bg-gray-700 mr-2 flex items-center justify-center uppercase text-xs">
-                  {(member.display_name || member.username).charAt(0)}
-                </div>
-                <div>
-                  <div className="text-sm">
-                    {member.display_name || member.username}
-                    {member.temporary_access && (
-                      <span className="ml-2 text-xs text-yellow-400">(temp)</span>
-                    )}
+                <div className="flex items-center">
+                  <div className="w-8 h-8 rounded-full bg-gray-700 mr-2 flex items-center justify-center uppercase text-xs">
+                    {(member.display_name || member.username).charAt(0)}
                   </div>
-                  <div className="text-xs text-gray-400">{member.role}</div>
+                  <div>
+                    <div className="text-sm">
+                      {member.display_name || member.username}
+                      {member.temporary_access && (
+                        <span className="ml-2 text-xs text-yellow-400">(temp)</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-400">{member.role}</div>
+                  </div>
                 </div>
+                
+                {/* Kick button - only show for owners/admins and not for themselves or the server owner */}
+                {canKick && 
+                 member.user_id !== session?.user?.id && 
+                 member.role !== 'owner' && (
+                  <button
+                    onClick={() => handleKickMember(member)}
+                    className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 p-1"
+                    title="Kick Member"
+                  >
+                    <UserX className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -394,6 +421,19 @@ export default function ServerView() {
           serverId={server.id}
           serverName={server.name}
           onClose={() => setShowDeleteModal(false)}
+        />
+      )}
+
+      {/* Kick member modal */}
+      {memberToKick && server && (
+        <KickMemberModal
+          serverId={server.id}
+          serverName={server.name}
+          userId={memberToKick.user_id}
+          username={memberToKick.username}
+          displayName={memberToKick.display_name}
+          onClose={() => setMemberToKick(null)}
+          onSuccess={handleKickSuccess}
         />
       )}
     </div>

@@ -1,77 +1,87 @@
 import React, { useState } from 'react';
-import { X, AlertTriangle, Trash } from 'lucide-react';
+import { X, UserX, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
 
-interface DeleteServerModalProps {
+interface KickMemberModalProps {
   serverId: string;
   serverName: string;
+  userId: string;
+  username: string;
+  displayName: string | null;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-export default function DeleteServerModal({ serverId, serverName, onClose }: DeleteServerModalProps) {
-  const [confirmText, setConfirmText] = useState('');
+export default function KickMemberModal({ 
+  serverId, 
+  serverName, 
+  userId, 
+  username, 
+  displayName, 
+  onClose, 
+  onSuccess 
+}: KickMemberModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
 
-  const handleDelete = async () => {
-    if (confirmText !== serverName) {
-      setError(`Please type "${serverName}" to confirm deletion`);
-      return;
-    }
-
+  const handleKick = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      console.log("Attempting to delete server:", serverId);
-      
-      // Call the server deletion function
-      const { data, error: deleteError } = await supabase.rpc(
-        'delete_server',
-        { server_id: serverId }
+      // Use the RPC function to kick the member (more secure)
+      const { data, error: kickError } = await supabase.rpc(
+        'kick_server_member',
+        {
+          server_id: serverId,
+          member_id: userId
+        }
       );
 
-      if (deleteError) {
-        console.error("RPC Error:", deleteError);
-        throw deleteError;
+      if (kickError) {
+        console.error("RPC Error:", kickError);
+        throw kickError;
       }
-      
-      console.log("Delete server response:", data);
-      
-      // If RPC fails, fallback to direct deletion (less safe, but might work)
+
+      console.log("Kick result:", data);
+
+      // If the RPC function fails, fall back to direct deletion
       if (!data) {
-        // Try direct deletion
-        console.log("Falling back to direct deletion");
+        console.log("Falling back to direct removal");
         const { error: directError } = await supabase
-          .from('servers')
+          .from('server_members')
           .delete()
-          .eq('id', serverId);
-          
+          .eq('server_id', serverId)
+          .eq('user_id', userId);
+
         if (directError) {
-          console.error("Direct deletion error:", directError);
+          console.error("Direct removal error:", directError);
           throw directError;
         }
       }
 
-      // Navigate back to dashboard after successful deletion
-      console.log("Server deleted successfully, redirecting...");
-      navigate('/dashboard');
+      // Call success callback if provided
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        onClose();
+      }
     } catch (err) {
-      console.error("Error deleting server:", err);
-      setError(err instanceof Error ? err.message : 'Failed to delete the server');
+      console.error("Error kicking member:", err);
+      setError(err instanceof Error ? err.message : 'Failed to remove member from server');
       setLoading(false);
     }
   };
+
+  const memberName = displayName || username;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
       <div className="bg-gray-800 rounded-lg w-full max-w-md p-6 shadow-lg">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold text-white flex items-center">
-            <Trash className="h-5 w-5 mr-2 text-red-500" />
-            Delete Server
+            <UserX className="h-5 w-5 mr-2 text-red-500" />
+            Remove Member
           </h2>
           <button 
             onClick={onClose}
@@ -85,27 +95,14 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
           <div className="flex items-start">
             <AlertTriangle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="text-red-500 font-medium mb-1">Warning: This action cannot be undone</h3>
+              <h3 className="text-red-500 font-medium mb-1">Remove member from server</h3>
               <p className="text-gray-300 text-sm">
-                This will permanently delete <span className="font-semibold">{serverName}</span> server, 
-                including all channels, messages, and member data. Server members will immediately lose 
-                access to all server content.
+                Are you sure you want to remove <span className="font-semibold">{memberName}</span> from 
+                <span className="font-semibold"> {serverName}</span>? They will no longer have access to any
+                channels or messages in this server.
               </p>
             </div>
           </div>
-        </div>
-
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            To confirm, type "{serverName}" in the box below:
-          </label>
-          <input
-            type="text"
-            value={confirmText}
-            onChange={(e) => setConfirmText(e.target.value)}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-            placeholder={`Type ${serverName} to confirm`}
-          />
         </div>
 
         {error && (
@@ -122,8 +119,8 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
             Cancel
           </button>
           <button
-            onClick={handleDelete}
-            disabled={loading || confirmText !== serverName}
+            onClick={handleKick}
+            disabled={loading}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -132,12 +129,12 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Deleting...
+                Removing...
               </>
             ) : (
               <>
-                <Trash className="h-4 w-4 mr-1" />
-                Delete Server
+                <UserX className="h-4 w-4 mr-1" />
+                Remove Member
               </>
             )}
           </button>
