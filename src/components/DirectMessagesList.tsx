@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { MessageSquare, User, RefreshCw, AlertCircle } from 'lucide-react';
-import { decryptMessage } from '../services/serverEncryptionService';
 
 interface FriendInfo {
   id: string;
@@ -62,32 +61,14 @@ export default function DirectMessagesList() {
       for (const friend of friendsList) {
         const { data: messageData } = await supabase
           .from('direct_messages')
-          .select('encrypted_content, iv, is_encrypted, created_at')
+          .select('encrypted_content, created_at')
           .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${friend.id}),and(sender_id.eq.${friend.id},receiver_id.eq.${session.user.id})`)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
 
         if (messageData) {
-          // Decrypt the message if it's encrypted
-          let displayMessage = messageData.encrypted_content;
-          
-          if (messageData.is_encrypted && messageData.iv !== 'unencrypted') {
-            try {
-              // Use conversation ID for decryption (same as in DirectMessage.tsx)
-              const conversationId = [session.user.id, friend.id].sort().join('-');
-              displayMessage = await decryptMessage(
-                conversationId,
-                messageData.encrypted_content,
-                messageData.iv
-              );
-            } catch (decryptError) {
-              console.error('Error decrypting message preview:', decryptError);
-              displayMessage = 'Encrypted message';
-            }
-          }
-          
-          friend.last_message = displayMessage;
+          friend.last_message = messageData.encrypted_content;
           friend.last_message_time = messageData.created_at;
         }
 

@@ -65,9 +65,20 @@ export default function ChannelView() {
         console.log('Channel server ID mismatch - Channel belongs to:', 
                   channelData.server_id, 'URL indicates server:', serverId);
       }
-      
-      // Now fetch messages
-      const { data, error } = await supabase
+
+      // Check if user has restricted history access
+      const { data: memberData, error: memberError } = await supabase
+        .from('server_members')
+        .select('hide_history, joined_at')
+        .eq('server_id', channelData.server_id)
+        .eq('user_id', session?.user?.id)
+        .single();
+
+      if (memberError) {
+        console.error('Error checking member permissions:', memberError);
+      }
+
+      let messageQuery = supabase
         .from('messages')
         .select(`
           id, 
@@ -87,6 +98,15 @@ export default function ChannelView() {
         `)
         .eq('channel_id', channelId)
         .order('created_at');
+
+      // If user has hide_history flag or joined after certain messages, filter the message history
+      if (memberData?.hide_history && memberData.joined_at) {
+        // Only show messages after the user joined
+        messageQuery = messageQuery.gte('created_at', memberData.joined_at);
+        console.log('Hiding message history before:', memberData.joined_at);
+      }
+
+      const { data, error } = await messageQuery;
       
       if (error) {
         console.error('Error fetching messages:', error);
