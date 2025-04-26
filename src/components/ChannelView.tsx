@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
-import { Send, AlertCircle, RefreshCw, Lock } from 'lucide-react';
+import { Send, AlertCircle, RefreshCw, Lock, MoreVertical, Edit, Trash, X, Check } from 'lucide-react';
 import { encryptMessage, decryptMessage } from '../services/serverEncryptionService';
 
 interface Message {
@@ -11,6 +11,7 @@ interface Message {
   encrypted_content: string;
   iv: string;
   created_at: string;
+  updated_at?: string;
   sender_username: string;
   sender_display_name: string | null;
   is_encrypted: boolean;
@@ -28,6 +29,12 @@ export default function ChannelView() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [channelName, setChannelName] = useState('');
   const [channelDetails, setChannelDetails] = useState<{ id: string, server_id: string, encryption_enabled: boolean } | null>(null);
+  
+  // Message editing states
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editingLoading, setEditingLoading] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -60,12 +67,6 @@ export default function ChannelView() {
       setChannelDetails(channelData);
       setChannelName(channelData.name);
       
-      // Check if channel belongs to the correct server
-      if (serverId && channelData.server_id !== serverId) {
-        console.log('Channel server ID mismatch - Channel belongs to:', 
-                  channelData.server_id, 'URL indicates server:', serverId);
-      }
-
       // Check if user has restricted history access
       const { data: memberData, error: memberError } = await supabase
         .from('server_members')
@@ -86,6 +87,7 @@ export default function ChannelView() {
           encrypted_content,
           iv, 
           created_at,
+          updated_at,
           is_encrypted,
           encryption_version,
           sender:users!sender_id (
@@ -99,9 +101,8 @@ export default function ChannelView() {
         .eq('channel_id', channelId)
         .order('created_at');
 
-      // If user has hide_history flag or joined after certain messages, filter the message history
+      // If user has hide_history flag, filter the message history
       if (memberData?.hide_history && memberData.joined_at) {
-        // Only show messages after the user joined
         messageQuery = messageQuery.gte('created_at', memberData.joined_at);
         console.log('Hiding message history before:', memberData.joined_at);
       }
@@ -143,6 +144,7 @@ export default function ChannelView() {
             encrypted_content: displayContent,
             iv: message.iv,
             created_at: message.created_at,
+            updated_at: message.updated_at,
             sender_username: message.sender?.username || 'Unknown User',
             sender_display_name: message.sender?.display_name || null,
             is_encrypted: message.is_encrypted || false
@@ -182,6 +184,24 @@ export default function ChannelView() {
         console.log('Received realtime message:', payload);
         fetchMessages();
       })
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `channel_id=eq.${channelId}`
+      }, (payload) => {
+        console.log('Message updated:', payload);
+        fetchMessages();
+      })
+      .on('postgres_changes', { 
+        event: 'DELETE', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `channel_id=eq.${channelId}`
+      }, (payload) => {
+        console.log('Message deleted:', payload);
+        fetchMessages();
+      })
       .subscribe((status) => {
         console.log('Subscription status:', status);
       });
@@ -190,7 +210,7 @@ export default function ChannelView() {
       console.log('Unsubscribing from channel');
       channel.unsubscribe();
     };
-  }, [channelId, serverId]); // Also depend on serverId
+  }, [channelId, serverId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,35 +262,92 @@ export default function ChannelView() {
       
       console.log('Message sent successfully:', data);
       
-      // Manually add the message to the list
-      const currentUser = await supabase
-        .from('users')
-        .select('username, display_name')
-        .eq('id', session.user.id)
-        .single();
-        
-      if (currentUser.data) {
-        const newMessageObj: Message = {
-          id: data.id,
-          sender_id: session.user.id,
-          encrypted_content: newMessage, // Show the unencrypted content in the UI
-          iv: ivString,
-          created_at: data.created_at,
-          sender_username: currentUser.data.username,
-          sender_display_name: currentUser.data.display_name,
-          is_encrypted: isEncrypted
-        };
-        
-        setMessages(prev => [...prev, newMessageObj]);
-        setTimeout(scrollToBottom, 100);
-      }
-      
       setNewMessage('');
+      
+      // Refresh messages after sending
+      fetchMessages();
     } catch (err) {
       console.error('Unexpected error sending message:', err);
       setSendError('An unexpected error occurred while sending your message');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleEditMessage = async (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setEditContent(content);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMessageId || !channelId || !editContent.trim()) return;
+    
+    setEditingLoading(true);
+    
+    try {
+      let encryptedContent = editContent;
+      let ivString = 'unencrypted';
+      let isEncrypted = false;
+      
+      // Only encrypt if the channel has encryption enabled
+      if (channelDetails?.encryption_enabled) {
+        const encryptResult = await encryptMessage(channelId, editContent);
+        encryptedContent = encryptResult.encrypted;
+        ivString = encryptResult.iv;
+        isEncrypted = ivString !== 'unencrypted';
+      }
+      
+      const { error } = await supabase
+        .from('messages')
+        .update({
+          encrypted_content: encryptedContent,
+          iv: ivString,
+          is_encrypted: isEncrypted,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingMessageId)
+        .eq('sender_id', session?.user?.id); // Only allow editing own messages
+        
+      if (error) {
+        console.error('Error editing message:', error);
+        setSendError(`Failed to edit message: ${error.message}`);
+        return;
+      }
+      
+      setEditingMessageId(null);
+      setEditContent('');
+      
+      // Refresh messages after edit
+      fetchMessages();
+    } catch (err) {
+      console.error('Unexpected error editing message:', err);
+      setSendError('An unexpected error occurred while editing your message');
+    } finally {
+      setEditingLoading(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm('Are you sure you want to delete this message?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId)
+        .eq('sender_id', session?.user?.id); // Only allow deleting own messages
+        
+      if (error) {
+        console.error('Error deleting message:', error);
+        setSendError(`Failed to delete message: ${error.message}`);
+        return;
+      }
+      
+      // Refresh messages after delete
+      fetchMessages();
+    } catch (err) {
+      console.error('Unexpected error deleting message:', err);
+      setSendError('An unexpected error occurred while deleting your message');
     }
   };
 
@@ -323,7 +400,12 @@ export default function ChannelView() {
           </div>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className="flex items-start">
+            <div 
+              key={message.id} 
+              className="flex items-start group"
+              onMouseEnter={() => setSelectedMessageId(message.id)}
+              onMouseLeave={() => setSelectedMessageId(null)}
+            >
               <div className="w-8 h-8 rounded-full bg-gray-700 mr-3 flex items-center justify-center uppercase text-xs">
                 {(message.sender_display_name || message.sender_username).charAt(0)}
               </div>
@@ -341,9 +423,65 @@ export default function ChannelView() {
                       Encrypted
                     </span>
                   )}
+                  {message.updated_at && message.updated_at !== message.created_at && (
+                    <span className="ml-2 text-xs text-gray-400 italic">
+                      (edited)
+                    </span>
+                  )}
                 </div>
-                <p className="text-gray-300 mt-1">{message.encrypted_content}</p>
+                
+                {editingMessageId === message.id ? (
+                  <div className="mt-1">
+                    <input
+                      type="text"
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full bg-gray-700 text-white rounded-md px-3 py-1 text-sm"
+                      autoFocus
+                    />
+                    <div className="mt-1 flex items-center space-x-2">
+                      <button
+                        onClick={handleSaveEdit}
+                        disabled={editingLoading}
+                        className="text-green-400 hover:text-green-300 text-xs"
+                      >
+                        {editingLoading ? 'Saving...' : <Check className="h-4 w-4" />}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingMessageId(null);
+                          setEditContent('');
+                        }}
+                        className="text-red-400 hover:text-red-300 text-xs"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-300 mt-1">{message.encrypted_content}</p>
+                )}
               </div>
+              
+              {/* Message actions */}
+              {message.sender_id === session?.user?.id && selectedMessageId === message.id && editingMessageId !== message.id && (
+                <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleEditMessage(message.id, message.encrypted_content)}
+                    className="p-1 text-gray-400 hover:text-white"
+                    title="Edit message"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteMessage(message.id)}
+                    className="p-1 text-gray-400 hover:text-red-400"
+                    title="Delete message"
+                  >
+                    <Trash className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}

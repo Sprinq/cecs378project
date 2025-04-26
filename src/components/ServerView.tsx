@@ -93,9 +93,26 @@ export default function ServerView() {
         if (channelsError) throw channelsError;
         setChannels(channelsData || []);
         
-        // If channels exist and no channel is selected, select the first one
-        if (channelsData && channelsData.length > 0 && !selectedChannelId) {
-          setSelectedChannelId(channelsData[0].id);
+        // If no channel is currently selected or the current channel doesn't exist
+        if (channelsData && channelsData.length > 0) {
+          // Check if the current channelId exists in this server
+          const currentChannelExists = channelId ? 
+            channelsData.some(channel => channel.id === channelId) : false;
+          
+          if (!currentChannelExists) {
+            // Find the general channel or default to the first channel
+            const generalChannel = channelsData.find(channel => 
+              channel.name.toLowerCase() === 'general'
+            );
+            
+            const defaultChannel = generalChannel || channelsData[0];
+            setSelectedChannelId(defaultChannel.id);
+            
+            // Navigate to the default channel
+            navigate(`/dashboard/server/${serverId}/channel/${defaultChannel.id}`, { replace: true });
+          } else {
+            setSelectedChannelId(channelId);
+          }
         }
 
         // Fetch server members with user details
@@ -184,7 +201,7 @@ export default function ServerView() {
       channelsChannel.unsubscribe();
       membersChannel.unsubscribe();
     };
-  }, [serverId, selectedChannelId, session]);
+  }, [serverId, session]);
 
   // Effect to update URL when selected channel changes
   useEffect(() => {

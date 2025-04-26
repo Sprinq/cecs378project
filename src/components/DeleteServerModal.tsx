@@ -40,24 +40,14 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
       
       console.log("Delete server response:", data);
       
-      // If RPC fails, fallback to direct deletion (less safe, but might work)
-      if (!data) {
-        // Try direct deletion
-        console.log("Falling back to direct deletion");
-        const { error: directError } = await supabase
-          .from('servers')
-          .delete()
-          .eq('id', serverId);
-          
-        if (directError) {
-          console.error("Direct deletion error:", directError);
-          throw directError;
-        }
+      // If the deletion was successful
+      if (data === true) {
+        console.log("Server deleted successfully, redirecting...");
+        navigate('/dashboard');
+      } else {
+        // If RPC returns false, something went wrong
+        throw new Error('Failed to delete server - operation returned false');
       }
-
-      // Navigate back to dashboard after successful deletion
-      console.log("Server deleted successfully, redirecting...");
-      navigate('/dashboard');
     } catch (err) {
       console.error("Error deleting server:", err);
       setError(err instanceof Error ? err.message : 'Failed to delete the server');

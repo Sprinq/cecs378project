@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
-import { Send, AlertCircle, RefreshCw, ArrowLeft, Lock } from 'lucide-react';
+import { Send, AlertCircle, RefreshCw, ArrowLeft, Lock, Edit, Trash, X, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { encryptMessage, decryptMessage } from '../services/serverEncryptionService';
 
@@ -12,6 +12,7 @@ interface Message {
   encrypted_content: string;
   iv: string;
   created_at: string;
+  updated_at?: string;
   sender_username: string;
   sender_display_name: string | null;
   is_encrypted: boolean;
@@ -37,6 +38,12 @@ export default function DirectMessage() {
   const navigate = useNavigate();
   const conversationId = session?.user ? 
     [session.user.id, friendId].sort().join('-') : null;
+
+  // Message editing states
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editingLoading, setEditingLoading] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -110,6 +117,7 @@ export default function DirectMessage() {
           encrypted_content,
           iv,
           created_at,
+          updated_at,
           is_encrypted,
           encryption_version,
           sender:users!sender_id (
@@ -152,6 +160,7 @@ export default function DirectMessage() {
             encrypted_content: displayContent,
             iv: message.iv,
             created_at: message.created_at,
+            updated_at: message.updated_at,
             sender_username: message.sender?.username || 'Unknown User',
             sender_display_name: message.sender?.display_name || null,
             is_encrypted: message.is_encrypted || false
@@ -180,6 +189,22 @@ export default function DirectMessage() {
       .channel(`direct_messages:${session.user.id}:${friendId}`)
       .on('postgres_changes', { 
         event: 'INSERT', 
+        schema: 'public', 
+        table: 'direct_messages',
+        filter: `or(and(sender_id=eq.${session.user.id},receiver_id=eq.${friendId}),and(sender_id=eq.${friendId},receiver_id=eq.${session.user.id}))`
+      }, () => {
+        fetchMessages();
+      })
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'direct_messages',
+        filter: `or(and(sender_id=eq.${session.user.id},receiver_id=eq.${friendId}),and(sender_id=eq.${friendId},receiver_id=eq.${session.user.id}))`
+      }, () => {
+        fetchMessages();
+      })
+      .on('postgres_changes', { 
+        event: 'DELETE', 
         schema: 'public', 
         table: 'direct_messages',
         filter: `or(and(sender_id=eq.${session.user.id},receiver_id=eq.${friendId}),and(sender_id=eq.${friendId},receiver_id=eq.${session.user.id}))`
@@ -230,35 +255,83 @@ export default function DirectMessage() {
         return;
       }
       
-      // Manually add the message to the list
-      const currentUser = await supabase
-        .from('users')
-        .select('username, display_name')
-        .eq('id', session.user.id)
-        .single();
-        
-      if (currentUser.data) {
-        const newMessageObj: Message = {
-          id: data.id,
-          sender_id: session.user.id,
-          encrypted_content: newMessage, // Show the unencrypted content in the UI for the sender
-          iv: ivString,
-          created_at: data.created_at,
-          sender_username: currentUser.data.username,
-          sender_display_name: currentUser.data.display_name,
-          is_encrypted: isEncrypted
-        };
-        
-        setMessages(prev => [...prev, newMessageObj]);
-        setTimeout(scrollToBottom, 100);
-      }
-      
       setNewMessage('');
+      
+      // Refresh messages after sending
+      fetchMessages();
     } catch (err) {
       console.error('Unexpected error sending message:', err);
       setSendError('An unexpected error occurred while sending your message');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleEditMessage = async (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setEditContent(content);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMessageId || !conversationId || !editContent.trim()) return;
+    
+    setEditingLoading(true);
+    
+    try {
+      // Encrypt the edited message
+      const encryptResult = await encryptMessage(conversationId, editContent);
+      
+      const { error } = await supabase
+        .from('direct_messages')
+        .update({
+          encrypted_content: encryptResult.encrypted,
+          iv: encryptResult.iv,
+          is_encrypted: encryptResult.iv !== 'unencrypted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingMessageId)
+        .eq('sender_id', session?.user?.id); // Only allow editing own messages
+        
+      if (error) {
+        console.error('Error editing message:', error);
+        setSendError(`Failed to edit message: ${error.message}`);
+        return;
+      }
+      
+      setEditingMessageId(null);
+      setEditContent('');
+      
+      // Refresh messages after edit
+      fetchMessages();
+    } catch (err) {
+      console.error('Unexpected error editing message:', err);
+      setSendError('An unexpected error occurred while editing your message');
+    } finally {
+      setEditingLoading(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm('Are you sure you want to delete this message?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('direct_messages')
+        .delete()
+        .eq('id', messageId)
+        .eq('sender_id', session?.user?.id); // Only allow deleting own messages
+        
+      if (error) {
+        console.error('Error deleting message:', error);
+        setSendError(`Failed to delete message: ${error.message}`);
+        return;
+      }
+      
+      // Refresh messages after delete
+      fetchMessages();
+    } catch (err) {
+      console.error('Unexpected error deleting message:', err);
+      setSendError('An unexpected error occurred while deleting your message');
     }
   };
 
@@ -322,18 +395,29 @@ export default function DirectMessage() {
           </div>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className={`flex items-start ${
-              message.sender_id === session?.user?.id ? 'justify-end' : ''
-            }`}>
+            <div 
+              key={message.id} 
+              className={`flex items-start ${
+                message.sender_id === session?.user?.id ? 'justify-end' : ''
+              }`}
+              onMouseEnter={() => setSelectedMessageId(message.id)}
+              onMouseLeave={() => setSelectedMessageId(null)}
+            >
               {message.sender_id !== session?.user?.id && (
                 <div className="w-8 h-8 rounded-full bg-gray-700 mr-3 flex items-center justify-center uppercase text-xs">
                   {(message.sender_display_name || message.sender_username).charAt(0)}
+                  {message.updated_at && message.updated_at !== message.created_at && (
+                    <span className="ml-2 text-xs text-gray-400 italic">
+                      (edited)
+                    </span>
+                  )}
                 </div>
               )}
+              
               <div className={`max-w-3/4 ${
                 message.sender_id === session?.user?.id 
-                  ? 'bg-indigo-600 rounded-tl-xl rounded-tr-sm rounded-bl-xl' 
-                  : 'bg-gray-700 rounded-tl-sm rounded-tr-xl rounded-br-xl'
+                  ? 'bg-indigo-600' 
+                  : 'bg-gray-700'
               } px-3 py-2 rounded-md`}>
                 {message.sender_id !== session?.user?.id && (
                   <div className="flex items-center mb-1">
@@ -348,9 +432,46 @@ export default function DirectMessage() {
                         <Lock className="h-3 w-3 mr-1" />
                       </span>
                     )}
+                    {message.updated_at && message.updated_at !== message.created_at && (
+                      <span className="ml-2 text-xs text-gray-300 italic">
+                        (edited)
+                      </span>
+                    )}
                   </div>
                 )}
-                <p className="text-gray-100">{message.encrypted_content}</p>
+                
+                {editingMessageId === message.id ? (
+                  <div className="mt-1">
+                    <input
+                      type="text"
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full bg-gray-700 text-white rounded-md px-3 py-1 text-sm"
+                      autoFocus
+                    />
+                    <div className="mt-1 flex items-center space-x-2">
+                      <button
+                        onClick={handleSaveEdit}
+                        disabled={editingLoading}
+                        className="text-green-400 hover:text-green-300 text-xs"
+                      >
+                        {editingLoading ? 'Saving...' : <Check className="h-4 w-4" />}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingMessageId(null);
+                          setEditContent('');
+                        }}
+                        className="text-red-400 hover:text-red-300 text-xs"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-100">{message.encrypted_content}</p>
+                )}
+                
                 {message.sender_id === session?.user?.id && (
                   <div className="text-right">
                     <span className="text-xs text-gray-300">
@@ -364,6 +485,27 @@ export default function DirectMessage() {
                   </div>
                 )}
               </div>
+              
+              {/* Message actions */}
+              {message.sender_id === session?.user?.id && selectedMessageId === message.id && editingMessageId !== message.id && (
+                <div className="flex items-center space-x-1 ml-2">
+                  <button
+                    onClick={() => handleEditMessage(message.id, message.encrypted_content)}
+                    className="p-1 text-gray-400 hover:text-white"
+                    title="Edit message"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteMessage(message.id)}
+                    className="p-1 text-gray-400 hover:text-red-400"
+                    title="Delete message"
+                  >
+                    <Trash className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              
               {message.sender_id === session?.user?.id && (
                 <div className="w-8 h-8 rounded-full bg-gray-700 ml-3 flex items-center justify-center uppercase text-xs invisible">
                   {/* Just for spacing */}
