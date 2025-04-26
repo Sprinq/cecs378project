@@ -58,119 +58,121 @@ export default function ServerView() {
     }
   }, [session]);
 
-  useEffect(() => {
+  const fetchServerData = async () => {
     if (!serverId) return;
+    
+    setLoading(true);
+    setError(null);
 
-    const fetchServerData = async () => {
-      setLoading(true);
-      setError(null);
+    try {
+      // Fetch server details
+      const { data: serverData, error: serverError } = await supabase
+        .from('servers')
+        .select('*')
+        .eq('id', serverId)
+        .single();
 
-      try {
-        // Fetch server details
-        const { data: serverData, error: serverError } = await supabase
-          .from('servers')
-          .select('*')
-          .eq('id', serverId)
-          .single();
+      if (serverError) throw serverError;
+      setServer(serverData);
+      
+      // Log the server owner ID for debugging
+      console.log("Server owner ID:", serverData.owner_id);
+      
+      // If the current user is the server owner, set their role immediately
+      if (session?.user && serverData.owner_id === session.user.id) {
+        console.log("User is the server owner!");
+        setUserRole('owner');
+      }
 
-        if (serverError) throw serverError;
-        setServer(serverData);
+      // Fetch channels
+      const { data: channelsData, error: channelsError } = await supabase
+        .from('channels')
+        .select('*')
+        .eq('server_id', serverId)
+        .order('name');
+
+      if (channelsError) throw channelsError;
+      setChannels(channelsData || []);
+      
+      // If no channel is currently selected or the current channel doesn't exist
+      if (channelsData && channelsData.length > 0) {
+        // Check if the current channelId exists in this server
+        const currentChannelExists = channelId ? 
+          channelsData.some(channel => channel.id === channelId) : false;
         
-        // Log the server owner ID for debugging
-        console.log("Server owner ID:", serverData.owner_id);
-        
-        // If the current user is the server owner, set their role immediately
-        if (session?.user && serverData.owner_id === session.user.id) {
-          console.log("User is the server owner!");
-          setUserRole('owner');
-        }
-
-        // Fetch channels
-        const { data: channelsData, error: channelsError } = await supabase
-          .from('channels')
-          .select('*')
-          .eq('server_id', serverId)
-          .order('name');
-
-        if (channelsError) throw channelsError;
-        setChannels(channelsData || []);
-        
-        // If no channel is currently selected or the current channel doesn't exist
-        if (channelsData && channelsData.length > 0) {
-          // Check if the current channelId exists in this server
-          const currentChannelExists = channelId ? 
-            channelsData.some(channel => channel.id === channelId) : false;
-          
-          if (!currentChannelExists) {
-            // Find the general channel or default to the first channel
-            const generalChannel = channelsData.find(channel => 
-              channel.name.toLowerCase() === 'general'
-            );
-            
-            const defaultChannel = generalChannel || channelsData[0];
-            setSelectedChannelId(defaultChannel.id);
-            
-            // Navigate to the default channel
-            navigate(`/dashboard/server/${serverId}/channel/${defaultChannel.id}`, { replace: true });
-          } else {
-            setSelectedChannelId(channelId);
-          }
-        }
-
-        // Fetch server members with user details
-        const { data: membersData, error: membersError } = await supabase
-          .from('server_members')
-          .select(`
-            user_id,
-            role,
-            temporary_access,
-            access_expires_at,
-            users (
-              username,
-              display_name
-            )
-          `)
-          .eq('server_id', serverId);
-
-        if (membersError) throw membersError;
-        
-        // Transform the nested data structure
-        const formattedMembers = membersData?.map(member => ({
-          user_id: member.user_id,
-          username: member.users.username,
-          display_name: member.users.display_name,
-          role: member.role,
-          temporary_access: member.temporary_access,
-          access_expires_at: member.access_expires_at
-        })) || [];
-        
-        setMembers(formattedMembers);
-
-        // Get the current user's role and temporary access status
-        if (session?.user) {
-          const currentUserMember = membersData?.find(member => 
-            member.user_id === session.user.id
+        if (!currentChannelExists) {
+          // Find the general channel or default to the first channel
+          const generalChannel = channelsData.find(channel => 
+            channel.name.toLowerCase() === 'general'
           );
           
-          if (currentUserMember) {
-            console.log("Found member role:", currentUserMember.role);
-            setUserRole(currentUserMember.role);
-            
-            // Set temporary access information if applicable
-            if (currentUserMember.temporary_access) {
-              console.log("User has temporary access, expires at:", currentUserMember.access_expires_at);
-              setTemporaryAccess(true);
-              setAccessExpiresAt(currentUserMember.access_expires_at);
-            }
+          const defaultChannel = generalChannel || channelsData[0];
+          setSelectedChannelId(defaultChannel.id);
+          
+          // Navigate to the default channel
+          navigate(`/dashboard/server/${serverId}/channel/${defaultChannel.id}`, { replace: true });
+        } else {
+          setSelectedChannelId(channelId || null);
+        }
+      }
+
+      // Fetch server members with user details
+      const { data: membersData, error: membersError } = await supabase
+        .from('server_members')
+        .select(`
+          user_id,
+          role,
+          temporary_access,
+          access_expires_at,
+          users (
+            username,
+            display_name
+          )
+        `)
+        .eq('server_id', serverId);
+
+      if (membersError) throw membersError;
+      
+      // Transform the nested data structure
+      const formattedMembers = membersData?.map(member => ({
+        user_id: member.user_id,
+        username: member.users.username,
+        display_name: member.users.display_name,
+        role: member.role,
+        temporary_access: member.temporary_access,
+        access_expires_at: member.access_expires_at
+      })) || [];
+      
+      setMembers(formattedMembers);
+
+      // Get the current user's role and temporary access status
+      if (session?.user) {
+        const currentUserMember = membersData?.find(member => 
+          member.user_id === session.user.id
+        );
+        
+        if (currentUserMember) {
+          console.log("Found member role:", currentUserMember.role);
+          setUserRole(currentUserMember.role);
+          
+          // Set temporary access information if applicable
+          if (currentUserMember.temporary_access) {
+            console.log("User has temporary access, expires at:", currentUserMember.access_expires_at);
+            setTemporaryAccess(true);
+            setAccessExpiresAt(currentUserMember.access_expires_at);
           }
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load server data');
-        console.error(err);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load server data');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!serverId) return;
 
     fetchServerData();
 
