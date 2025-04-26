@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Routes, Route } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Hash, Users, Settings, Link as LinkIcon, Trash, MoreVertical, UserX } from 'lucide-react';
+import { Hash, Users, Settings, Link as LinkIcon, Trash, MoreVertical, UserX, Plus } from 'lucide-react';
 import ChannelView from './ChannelView';
 import ServerInvite from './ServerInvite';
 import DeleteServerModal from './DeleteServerModal';
 import KickMemberModal from './KickMemberModal';
 import TemporaryAccessBanner from './TemporaryAccessBanner';
+import ManageChannels from './ManageChannels';
 import { useAuthStore } from '../stores/authStore';
 
 interface Server {
@@ -46,6 +47,7 @@ export default function ServerView() {
   const [temporaryAccess, setTemporaryAccess] = useState<boolean>(false);
   const [accessExpiresAt, setAccessExpiresAt] = useState<string | null>(null);
   const [memberToKick, setMemberToKick] = useState<ServerMember | null>(null);
+  const [showManageChannels, setShowManageChannels] = useState(false);
   const { session } = useAuthStore();
   const navigate = useNavigate();
 
@@ -337,7 +339,18 @@ export default function ServerView() {
           </div>
           
           <div className="mb-4">
-            <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 px-2">Channels</h4>
+            <div className="flex items-center justify-between mb-2 px-2">
+              <h4 className="uppercase text-xs font-semibold text-gray-400">Channels</h4>
+              {isServerOwner && (
+                <button
+                  onClick={() => setShowManageChannels(true)}
+                  className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700"
+                  title="Manage Channels"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              )}
+            </div>
             <div className="space-y-1">
               {channels.map(channel => (
                 <div 
@@ -451,6 +464,16 @@ export default function ServerView() {
           displayName={memberToKick.display_name}
           onClose={() => setMemberToKick(null)}
           onSuccess={handleKickSuccess}
+        />
+      )}
+
+      {/* Manage channels modal */}
+      {showManageChannels && server && (
+        <ManageChannels
+          serverId={server.id}
+          serverName={server.name}
+          onClose={() => setShowManageChannels(false)}
+          onChannelUpdate={fetchServerData}
         />
       )}
     </div>
