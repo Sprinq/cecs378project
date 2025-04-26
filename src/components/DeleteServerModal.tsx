@@ -1,3 +1,5 @@
+// src/components/DeleteServerModal.tsx
+
 import React, { useState } from 'react';
 import { X, AlertTriangle, Trash } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -27,10 +29,10 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
     try {
       console.log("Attempting to delete server:", serverId);
       
-      // Call the server deletion function
+      // Call the server deletion function with the corrected parameter name
       const { data, error: deleteError } = await supabase.rpc(
         'delete_server',
-        { server_id: serverId }
+        { p_server_id: serverId }
       );
 
       if (deleteError) {
@@ -44,6 +46,7 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
       if (data === true) {
         console.log("Server deleted successfully, redirecting...");
         navigate('/dashboard');
+        onClose(); // Close the modal
       } else {
         // If RPC returns false, something went wrong
         throw new Error('Failed to delete server - operation returned false');
