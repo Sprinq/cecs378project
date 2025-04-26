@@ -1,9 +1,11 @@
--- Drop the existing function first
+-- Migration file: supabase/migrations/20250502_fix_server_deletion_conflict.sql
+
+-- Drop the existing function
 DROP FUNCTION IF EXISTS delete_server(UUID);
 
--- Create improved delete_server function
+-- Create a corrected delete_server function with proper parameter reference
 CREATE OR REPLACE FUNCTION delete_server(
-  server_id UUID
+  p_server_id UUID
 )
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -15,7 +17,7 @@ BEGIN
   -- Check if the current user is the owner of the server
   SELECT EXISTS (
     SELECT 1 FROM public.servers
-    WHERE id = server_id
+    WHERE id = p_server_id
     AND owner_id = auth.uid()
   ) INTO is_owner;
   
@@ -24,29 +26,9 @@ BEGIN
     RAISE EXCEPTION 'Only the server owner can delete a server';
   END IF;
   
-  -- First, delete all dependent data explicitly to avoid constraint issues
-  
-  -- Delete messages from channels in this server
-  DELETE FROM public.messages 
-  WHERE channel_id IN (
-    SELECT id FROM public.channels WHERE server_id = server_id
-  );
-  
-  -- Delete channels
-  DELETE FROM public.channels
-  WHERE server_id = server_id;
-  
-  -- Delete server members
-  DELETE FROM public.server_members
-  WHERE server_id = server_id;
-  
-  -- Delete server invites
-  DELETE FROM public.server_invites
-  WHERE server_id = server_id;
-  
-  -- Finally, delete the server itself
+  -- Delete the server and all related data will cascade due to foreign key constraints
   DELETE FROM public.servers
-  WHERE id = server_id
+  WHERE id = p_server_id
   AND owner_id = auth.uid();
   
   -- Return true if the server was deleted
