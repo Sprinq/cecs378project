@@ -22,7 +22,8 @@ export default function DirectMessagesList() {
   const { session } = useAuthStore();
   const navigate = useNavigate();
 
-  const fetchFriends = async () => {
+  // Memoize fetchFriends to avoid stale closure issues
+  const fetchFriends = React.useCallback(async () => {
     if (!session?.user) return;
     
     setLoading(true);
@@ -62,32 +63,40 @@ export default function DirectMessagesList() {
       for (const friend of friendsList) {
         const { data: messageData } = await supabase
           .from('direct_messages')
-          .select('encrypted_content, iv, is_encrypted, created_at')
+          .select('encrypted_content, iv, created_at, is_encrypted, sender_id, updated_at')
           .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${friend.id}),and(sender_id.eq.${friend.id},receiver_id.eq.${session.user.id})`)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
 
         if (messageData) {
-          // Decrypt the message if it's encrypted
-          let displayMessage = messageData.encrypted_content;
-          
-          if (messageData.is_encrypted && messageData.iv !== 'unencrypted') {
+          // Try to decrypt the message for preview
+          let displayContent = messageData.encrypted_content;
+          if (messageData.is_encrypted) {
             try {
-              // Use conversation ID for decryption (same as in DirectMessage.tsx)
               const conversationId = [session.user.id, friend.id].sort().join('-');
-              displayMessage = await decryptMessage(
+              displayContent = await decryptMessage(
                 conversationId,
                 messageData.encrypted_content,
                 messageData.iv
               );
-            } catch (decryptError) {
-              console.error('Error decrypting message preview:', decryptError);
-              displayMessage = 'Encrypted message';
+            } catch (error) {
+              console.error('Failed to decrypt message preview:', error);
+              displayContent = '🔒 [Encrypted message]';
             }
           }
           
-          friend.last_message = displayMessage;
+          // Add prefix for messages sent by the current user
+          if (messageData.sender_id === session.user.id) {
+            displayContent = `You: ${displayContent}`;
+          }
+          
+          // Mark edited messages
+          if (messageData.updated_at && messageData.updated_at !== messageData.created_at) {
+            displayContent += ' (edited)';
+          }
+          
+          friend.last_message = displayContent;
           friend.last_message_time = messageData.created_at;
         }
 
@@ -116,38 +125,79 @@ export default function DirectMessagesList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [session]);
 
   useEffect(() => {
     if (session?.user) {
       fetchFriends();
+
+      // Set up real-time subscriptions for all message events (INSERT, UPDATE, DELETE)
+      const messagesChannel = supabase
+        .channel(`direct_messages_channel_${session.user.id}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `receiver_id=eq.${session.user.id}`
+        }, (payload) => {
+          console.log('Message INSERT received (receiver):', payload);
+          fetchFriends();
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `receiver_id=eq.${session.user.id}`
+        }, (payload) => {
+          console.log('Message UPDATE received (receiver):', payload);
+          fetchFriends();
+        })
+        .on('postgres_changes', {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `receiver_id=eq.${session.user.id}`
+        }, (payload) => {
+          console.log('Message DELETE received (receiver):', payload);
+          fetchFriends();
+        })
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `sender_id=eq.${session.user.id}`
+        }, (payload) => {
+          console.log('Message INSERT received (sender):', payload);
+          fetchFriends();
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `sender_id=eq.${session.user.id}`
+        }, (payload) => {
+          console.log('Message UPDATE received (sender):', payload);
+          fetchFriends();
+        })
+        .on('postgres_changes', {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'direct_messages',
+          filter: `sender_id=eq.${session.user.id}`
+        }, (payload) => {
+          console.log('Message DELETE received (sender):', payload);
+          fetchFriends();
+        })
+        .subscribe((status) => {
+          console.log('Direct messages channel subscription status:', status);
+        });
+
+      return () => {
+        console.log('Unsubscribing from direct messages channel');
+        messagesChannel.unsubscribe();
+      };
     }
-
-    // Set up real-time subscriptions
-    const messagesChannel = supabase
-      .channel('direct_messages_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'direct_messages',
-        filter: `receiver_id=eq.${session?.user?.id}`
-      }, () => {
-        fetchFriends();
-      })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'direct_messages',
-        filter: `sender_id=eq.${session?.user?.id}`
-      }, () => {
-        fetchFriends();
-      })
-      .subscribe();
-
-    return () => {
-      messagesChannel.unsubscribe();
-    };
-  }, [session]);
+  }, [session, fetchFriends]);
 
   // Format timestamp
   const formatTime = (timestamp: string | null) => {
