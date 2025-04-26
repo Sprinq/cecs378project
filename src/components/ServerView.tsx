@@ -8,22 +8,16 @@ import {
   Link as LinkIcon,
   Trash,
   MoreVertical,
+  UserX,
+  Plus,
 } from "lucide-react";
 import ChannelView from "./ChannelView";
 import ServerInvite from "./ServerInvite";
 import DeleteServerModal from "./DeleteServerModal";
+import KickMemberModal from "./KickMemberModal";
+import TemporaryAccessBanner from "./TemporaryAccessBanner";
+import ManageChannels from "./ManageChannels";
 import { useAuthStore } from "../stores/authStore";
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Routes, Route } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { Hash, Users, Settings, Link as LinkIcon, Trash, MoreVertical, UserX, Plus } from 'lucide-react';
-import ChannelView from './ChannelView';
-import ServerInvite from './ServerInvite';
-import DeleteServerModal from './DeleteServerModal';
-import KickMemberModal from './KickMemberModal';
-import TemporaryAccessBanner from './TemporaryAccessBanner';
-import ManageChannels from './ManageChannels';
-import { useAuthStore } from '../stores/authStore';
 
 interface Server {
   id: string;
@@ -43,6 +37,8 @@ interface ServerMember {
   username: string;
   display_name: string | null;
   role: string;
+  temporary_access?: boolean;
+  access_expires_at?: string | null;
 }
 
 export default function ServerView() {
@@ -59,7 +55,6 @@ export default function ServerView() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showServerMenu, setShowServerMenu] = useState(false);
   const [userRole, setUserRole] = useState<string>("member");
-  const [userRole, setUserRole] = useState<string>('member');
   const [temporaryAccess, setTemporaryAccess] = useState<boolean>(false);
   const [accessExpiresAt, setAccessExpiresAt] = useState<string | null>(null);
   const [memberToKick, setMemberToKick] = useState<ServerMember | null>(null);
@@ -74,114 +69,73 @@ export default function ServerView() {
     }
   }, [session]);
 
-  useEffect(() => {
+  const fetchServerData = async () => {
     if (!serverId) return;
 
-    const fetchServerData = async () => {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        // Fetch server details
-        const { data: serverData, error: serverError } = await supabase
-          .from("servers")
-          .select("*")
-          .eq("id", serverId)
-          .single();
     try {
       // Fetch server details
       const { data: serverData, error: serverError } = await supabase
-        .from('servers')
-        .select('*')
-        .eq('id', serverId)
+        .from("servers")
+        .select("*")
+        .eq("id", serverId)
         .single();
 
-        if (serverError) throw serverError;
-        setServer(serverData);
-
-        // Log the server owner ID for debugging
-        console.log("Server owner ID:", serverData.owner_id);
-
-        // If the current user is the server owner, set their role immediately
-        if (session?.user && serverData.owner_id === session.user.id) {
-          console.log("User is the server owner!");
-          setUserRole("owner");
-        }
       if (serverError) throw serverError;
       setServer(serverData);
-      
+
       // Log the server owner ID for debugging
       console.log("Server owner ID:", serverData.owner_id);
-      
+
       // If the current user is the server owner, set their role immediately
       if (session?.user && serverData.owner_id === session.user.id) {
         console.log("User is the server owner!");
-        setUserRole('owner');
+        setUserRole("owner");
       }
 
-        // Fetch channels
-        const { data: channelsData, error: channelsError } = await supabase
-          .from("channels")
-          .select("*")
-          .eq("server_id", serverId)
-          .order("name");
       // Fetch channels
       const { data: channelsData, error: channelsError } = await supabase
-        .from('channels')
-        .select('*')
-        .eq('server_id', serverId)
-        .order('name');
+        .from("channels")
+        .select("*")
+        .eq("server_id", serverId)
+        .order("name");
 
-        if (channelsError) throw channelsError;
-        setChannels(channelsData || []);
-
-        // If channels exist and no channel is selected, select the first one
-        if (channelsData && channelsData.length > 0 && !selectedChannelId) {
-          setSelectedChannelId(channelsData[0].id);
-        }
       if (channelsError) throw channelsError;
       setChannels(channelsData || []);
-      
+
       // If no channel is currently selected or the current channel doesn't exist
       if (channelsData && channelsData.length > 0) {
         // Check if the current channelId exists in this server
-        const currentChannelExists = channelId ? 
-          channelsData.some(channel => channel.id === channelId) : false;
-        
+        const currentChannelExists = channelId
+          ? channelsData.some((channel) => channel.id === channelId)
+          : false;
+
         if (!currentChannelExists) {
           // Find the general channel or default to the first channel
-          const generalChannel = channelsData.find(channel => 
-            channel.name.toLowerCase() === 'general'
+          const generalChannel = channelsData.find(
+            (channel) => channel.name.toLowerCase() === "general"
           );
-          
+
           const defaultChannel = generalChannel || channelsData[0];
           setSelectedChannelId(defaultChannel.id);
-          
+
           // Navigate to the default channel
-          navigate(`/dashboard/server/${serverId}/channel/${defaultChannel.id}`, { replace: true });
+          navigate(
+            `/dashboard/server/${serverId}/channel/${defaultChannel.id}`,
+            { replace: true }
+          );
         } else {
           setSelectedChannelId(channelId || null);
         }
       }
 
-        // Fetch server members with user details
-        const { data: membersData, error: membersError } = await supabase
-          .from("server_members")
-          .select(
-            `
-            user_id,
-            role,
-            users (
-              username,
-              display_name
-            )
-          `
-          )
-          .eq("server_id", serverId);
       // Fetch server members with user details
       const { data: membersData, error: membersError } = await supabase
-        .from('server_members')
-        .select(`
+        .from("server_members")
+        .select(
+          `
           user_id,
           role,
           temporary_access,
@@ -190,75 +144,50 @@ export default function ServerView() {
             username,
             display_name
           )
-        `)
-        .eq('server_id', serverId);
+        `
+        )
+        .eq("server_id", serverId);
 
-        if (membersError) throw membersError;
-
-        // Transform the nested data structure
-        const formattedMembers =
-          membersData?.map((member) => ({
-            user_id: member.user_id,
-            username: member.users.username,
-            display_name: member.users.display_name,
-            role: member.role,
-          })) || [];
-
-        setMembers(formattedMembers);
       if (membersError) throw membersError;
-      
+
       // Transform the nested data structure
-      const formattedMembers = membersData?.map(member => ({
-        user_id: member.user_id,
-        username: member.users.username,
-        display_name: member.users.display_name,
-        role: member.role,
-        temporary_access: member.temporary_access,
-        access_expires_at: member.access_expires_at
-      })) || [];
-      
+      const formattedMembers =
+        membersData?.map((member) => ({
+          user_id: member.user_id,
+          username: member.users.username,
+          display_name: member.users.display_name,
+          role: member.role,
+          temporary_access: member.temporary_access,
+          access_expires_at: member.access_expires_at,
+        })) || [];
+
       setMembers(formattedMembers);
 
-        // Get the current user's role
-        if (session?.user) {
-          const currentUserMember = membersData?.find(
-            (member) => member.user_id === session.user.id
-          );
-
-          if (currentUserMember) {
-            console.log("Found member role:", currentUserMember.role);
-            setUserRole(currentUserMember.role);
-          }
-        }
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load server data"
-        );
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
       // Get the current user's role and temporary access status
       if (session?.user) {
-        const currentUserMember = membersData?.find(member => 
-          member.user_id === session.user.id
+        const currentUserMember = membersData?.find(
+          (member) => member.user_id === session.user.id
         );
-        
+
         if (currentUserMember) {
           console.log("Found member role:", currentUserMember.role);
           setUserRole(currentUserMember.role);
-          
+
           // Set temporary access information if applicable
           if (currentUserMember.temporary_access) {
-            console.log("User has temporary access, expires at:", currentUserMember.access_expires_at);
+            console.log(
+              "User has temporary access, expires at:",
+              currentUserMember.access_expires_at
+            );
             setTemporaryAccess(true);
             setAccessExpiresAt(currentUserMember.access_expires_at);
           }
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load server data');
+      setError(
+        err instanceof Error ? err.message : "Failed to load server data"
+      );
       console.error(err);
     } finally {
       setLoading(false);
@@ -307,7 +236,7 @@ export default function ServerView() {
       channelsChannel.unsubscribe();
       membersChannel.unsubscribe();
     };
-  }, [serverId, selectedChannelId, session]);
+  }, [serverId, session]);
 
   // Effect to update URL when selected channel changes
   useEffect(() => {
@@ -334,12 +263,19 @@ export default function ServerView() {
     setSelectedChannelId(channelId);
   };
 
+  const handleKickMember = (member: ServerMember) => {
+    setMemberToKick(member);
+  };
+
+  const handleKickSuccess = () => {
+    setMemberToKick(null);
+    // The real-time subscription will update the members list
+  };
+
   // Check if user is admin or owner
   const canInvite = userRole === "owner" || userRole === "admin";
+  const canKick = userRole === "owner" || userRole === "admin";
 
-  const canInvite = userRole === 'owner' || userRole === 'admin';
-  const canKick = userRole === 'owner' || userRole === 'admin';
-  
   // Alternative check - if server exists and current user is the owner
   const isServerOwner =
     server && session?.user && server.owner_id === session.user.id;
@@ -375,101 +311,22 @@ export default function ServerView() {
   }
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
-      {/* Channels sidebar */}
-      <div className="w-full lg:w-64 bg-gray-800 p-4 flex flex-col h-48 lg:h-full overflow-y-auto">
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-1">
-            <h3 className="font-semibold text-xl text-white">{server.name}</h3>
-            <div className="flex items-center">
-              {/* Invite button */}
-              {(canInvite || isServerOwner) && (
-                <button
-                  onClick={() => setShowInviteModal(true)}
-                  className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700 mr-1"
-                  title="Invite People"
-                >
-                  <LinkIcon className="h-4 w-4" />
-                </button>
-              )}
-
-              {/* Server settings button */}
-              {isServerOwner && (
-                <div className="relative">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowServerMenu(!showServerMenu);
-                    }}
-                    className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
-                    title="Server Settings"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </button>
-
-                  {/* Server settings dropdown */}
-                  {showServerMenu && (
-                    <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
-                      {/* Delete server option */}
-                      <button
-                        onClick={() => {
-                          setShowServerMenu(false);
-                          setShowDeleteModal(true);
-                        }}
-                        className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
-                      >
-                        <Trash className="h-4 w-4 mr-2" />
-                        Delete Server
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-          {server.description && (
-            <p className="text-sm text-gray-400">{server.description}</p>
-          )}
-        </div>
-
-        <div className="mb-4">
-          <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 px-2">
-            Channels
-          </h4>
-          <div className="space-y-1">
-            {channels.map((channel) => (
-              <div
-                key={channel.id}
-                className={`flex items-center px-2 py-1 ${
-                  selectedChannelId === channel.id
-                    ? "bg-gray-700 text-white"
-                    : "text-gray-300 hover:bg-gray-700"
-                } rounded cursor-pointer`}
-                onClick={() => handleChannelClick(channel.id)}
-              >
-                <Hash className="h-4 w-4 mr-2 text-gray-400" />
-                <span>{channel.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     <div className="flex flex-col h-full">
       {/* Temporary access banner - show at the top of the page */}
-      {temporaryAccess && (
-        <TemporaryAccessBanner expiresAt={accessExpiresAt} />
-      )}
-      
-      <div className="flex flex-1 h-0">
+      {temporaryAccess && <TemporaryAccessBanner expiresAt={accessExpiresAt} />}
+
+      <div className="flex flex-1 h-0 flex-col lg:flex-row">
         {/* Channels sidebar */}
-        <div className="w-64 bg-gray-800 p-4 flex flex-col h-full">
+        <div className="width-full lg:w-64 bg-gray-800 p-4 flex flex-col h-48 lg:h-full">
           <div className="mb-6">
             <div className="flex justify-between items-center mb-1">
-              <h3 className="font-semibold text-xl text-white">{server.name}</h3>
+              <h3 className="font-semibold text-xl text-white">
+                {server.name}
+              </h3>
               <div className="flex items-center">
                 {/* Invite button */}
                 {(canInvite || isServerOwner) && (
-                  <button 
+                  <button
                     onClick={() => setShowInviteModal(true)}
                     className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700 mr-1"
                     title="Invite People"
@@ -477,11 +334,11 @@ export default function ServerView() {
                     <LinkIcon className="h-4 w-4" />
                   </button>
                 )}
-                
+
                 {/* Server settings button */}
                 {isServerOwner && (
                   <div className="relative">
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowServerMenu(!showServerMenu);
@@ -491,12 +348,12 @@ export default function ServerView() {
                     >
                       <MoreVertical className="h-4 w-4" />
                     </button>
-                    
+
                     {/* Server settings dropdown */}
                     {showServerMenu && (
                       <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
                         {/* Delete server option */}
-                        <button 
+                        <button
                           onClick={() => {
                             setShowServerMenu(false);
                             setShowDeleteModal(true);
@@ -516,10 +373,12 @@ export default function ServerView() {
               <p className="text-sm text-gray-400">{server.description}</p>
             )}
           </div>
-          
-          <div className="mb-4">
+
+          <div className="mb-4 overflow-y-auto">
             <div className="flex items-center justify-between mb-2 px-2">
-              <h4 className="uppercase text-xs font-semibold text-gray-400">Channels</h4>
+              <h4 className="uppercase text-xs font-semibold text-gray-400">
+                Channels
+              </h4>
               {isServerOwner && (
                 <button
                   onClick={() => setShowManageChannels(true)}
@@ -531,13 +390,13 @@ export default function ServerView() {
               )}
             </div>
             <div className="space-y-1">
-              {channels.map(channel => (
-                <div 
+              {channels.map((channel) => (
+                <div
                   key={channel.id}
                   className={`flex items-center px-2 py-1 ${
-                    selectedChannelId === channel.id 
-                      ? 'bg-gray-700 text-white' 
-                      : 'text-gray-300 hover:bg-gray-700'
+                    selectedChannelId === channel.id
+                      ? "bg-gray-700 text-white"
+                      : "text-gray-300 hover:bg-gray-700"
                   } rounded cursor-pointer`}
                   onClick={() => handleChannelClick(channel.id)}
                 >
@@ -549,78 +408,35 @@ export default function ServerView() {
           </div>
         </div>
 
-      {/* Main content area */}
-      <div className="flex-1 bg-gray-900 overflow-y-auto">
-        <Routes>
-          <Route path="/channel/:channelId" element={<ChannelView />} />
-          <Route
-            path="*"
-            element={
-              <div className="p-4">
-                <h2 className="text-2xl font-semibold mb-4 text-white">
-                  Welcome to {server.name}
-                </h2>
-                <p className="text-gray-400">
-                  Select a channel to start chatting!
-                </p>
-              </div>
-            }
-          />
-        </Routes>
-      </div>
         {/* Main content area */}
-        <div className="flex-1 bg-gray-900">
+        <div className="flex-1 bg-gray-900 overflow-y-auto">
           <Routes>
-            <Route 
-              path="/channel/:channelId" 
-              element={<ChannelView />} 
-            />
-            <Route 
-              path="*" 
+            <Route path="/channel/:channelId" element={<ChannelView />} />
+            <Route
+              path="*"
               element={
                 <div className="p-4">
-                  <h2 className="text-2xl font-semibold mb-4 text-white">Welcome to {server.name}</h2>
+                  <h2 className="text-2xl font-semibold mb-4 text-white">
+                    Welcome to {server.name}
+                  </h2>
                   <p className="text-gray-400">
                     Select a channel to start chatting!
                   </p>
                 </div>
-              } 
+              }
             />
           </Routes>
         </div>
 
-      {/* Members sidebar */}
-      <div className="w-56 bg-gray-800 p-4 hidden lg:block">
-        <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 flex items-center">
-          <Users className="h-3 w-3 mr-1" />
-          Members ({members.length})
-        </h4>
-        <div className="space-y-2">
-          {members.map((member) => (
-            <div
-              key={member.user_id}
-              className="flex items-center text-gray-300"
-            >
-              <div className="w-8 h-8 rounded-full bg-gray-700 mr-2 flex items-center justify-center uppercase text-xs">
-                {(member.display_name || member.username).charAt(0)}
-              </div>
-              <div>
-                <div className="text-sm">
-                  {member.display_name || member.username}
-                </div>
-                <div className="text-xs text-gray-400">{member.role}</div>
-              </div>
-            </div>
-          ))}
         {/* Members sidebar */}
-        <div className="w-56 bg-gray-800 p-4">
+        <div className="width-full lg:w-56 bg-gray-800 p-4">
           <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 flex items-center">
             <Users className="h-3 w-3 mr-1" />
             Members ({members.length})
           </h4>
-          <div className="space-y-2">
-            {members.map(member => (
-              <div 
+          <div className="space-y-2 h-32 overflow-y-auto">
+            {members.map((member) => (
+              <div
                 key={member.user_id}
                 className="flex items-center justify-between text-gray-300 group"
               >
@@ -632,25 +448,27 @@ export default function ServerView() {
                     <div className="text-sm">
                       {member.display_name || member.username}
                       {member.temporary_access && (
-                        <span className="ml-2 text-xs text-yellow-400">(temp)</span>
+                        <span className="ml-2 text-xs text-yellow-400">
+                          (temp)
+                        </span>
                       )}
                     </div>
                     <div className="text-xs text-gray-400">{member.role}</div>
                   </div>
                 </div>
-                
+
                 {/* Kick button - only show for owners/admins and not for themselves or the server owner */}
-                {canKick && 
-                 member.user_id !== session?.user?.id && 
-                 member.role !== 'owner' && (
-                  <button
-                    onClick={() => handleKickMember(member)}
-                    className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 p-1"
-                    title="Kick Member"
-                  >
-                    <UserX className="h-4 w-4" />
-                  </button>
-                )}
+                {canKick &&
+                  member.user_id !== session?.user?.id &&
+                  member.role !== "owner" && (
+                    <button
+                      onClick={() => handleKickMember(member)}
+                      className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 p-1"
+                      title="Kick Member"
+                    >
+                      <UserX className="h-4 w-4" />
+                    </button>
+                  )}
               </div>
             ))}
           </div>
@@ -672,6 +490,29 @@ export default function ServerView() {
           serverId={server.id}
           serverName={server.name}
           onClose={() => setShowDeleteModal(false)}
+        />
+      )}
+
+      {/* Kick member modal */}
+      {memberToKick && server && (
+        <KickMemberModal
+          serverId={server.id}
+          serverName={server.name}
+          userId={memberToKick.user_id}
+          username={memberToKick.username}
+          displayName={memberToKick.display_name}
+          onClose={() => setMemberToKick(null)}
+          onSuccess={handleKickSuccess}
+        />
+      )}
+
+      {/* Manage channels modal */}
+      {showManageChannels && server && (
+        <ManageChannels
+          serverId={server.id}
+          serverName={server.name}
+          onClose={() => setShowManageChannels(false)}
+          onChannelUpdate={fetchServerData}
         />
       )}
     </div>
