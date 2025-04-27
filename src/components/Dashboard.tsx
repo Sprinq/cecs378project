@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../stores/authStore';
-import ServerList from './ServerList';
-import ServerView from './ServerView';
-import Friends from './Friends';
-import DirectMessagesList from './DirectMessagesList';
-import DirectMessage from './DirectMessage';
-import Welcome from './Welcome';
+import React, { useEffect, useState } from "react";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
+import { useAuthStore } from "../stores/authStore";
+import ServerList from "./ServerList";
+import ServerView from "./ServerView";
+import Friends from "./Friends";
+import DirectMessagesList from "./DirectMessagesList";
+import DirectMessage from "./DirectMessage";
+import Welcome from "./Welcome";
 
 export default function Dashboard() {
   const { session } = useAuthStore();
@@ -24,22 +24,20 @@ export default function Dashboard() {
       try {
         // Check if user exists in our database
         const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('id, username, display_name')
-          .eq('id', session.user.id)
+          .from("users")
+          .select("id, username, display_name")
+          .eq("id", session.user.id)
           .single();
-          
+
         if (userError) {
           console.error("Error checking user:", userError);
           // User might not exist, attempt to create profile
-          const { error: createError } = await supabase
-            .from('users')
-            .insert({
-              id: session.user.id,
-              username: session.user.email,
-              display_name: session.user.email?.split('@')[0]
-            });
-            
+          const { error: createError } = await supabase.from("users").insert({
+            id: session.user.id,
+            username: session.user.email,
+            display_name: session.user.email?.split("@")[0],
+          });
+
           if (createError) {
             console.error("Error creating user profile:", createError);
           }
@@ -63,7 +61,7 @@ export default function Dashboard() {
   }
 
   // Check if we're in /dashboard with no subpath
-  const isDashboardRoot = location.pathname === '/dashboard';
+  const isDashboardRoot = location.pathname === "/dashboard";
 
   return (
     <div className="flex h-screen bg-gray-900">
@@ -73,28 +71,34 @@ export default function Dashboard() {
           <Routes>
             <Route path="/server/:serverId/*" element={<ServerView />} />
             <Route path="/friends" element={<Friends />} />
-            <Route path="/dm" element={
-              <div className="flex h-full">
-                <div className="w-64 bg-gray-800 border-r border-gray-700">
-                  <DirectMessagesList />
-                </div>
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="text-gray-400">
-                    Select a conversation to start messaging
+            <Route
+              path="/dm"
+              element={
+                <div className="flex h-full">
+                  <div className="w-64 bg-gray-800 border-r border-gray-700">
+                    <DirectMessagesList />
+                  </div>
+                  <div className="flex-1 flex items-center justify-center p-2">
+                    <div className="text-gray-400">
+                      Select a conversation to start messaging
+                    </div>
                   </div>
                 </div>
-              </div>
-            } />
-            <Route path="/dm/:friendId" element={
-              <div className="flex h-full">
-                <div className="w-64 bg-gray-800 border-r border-gray-700 hidden md:block">
-                  <DirectMessagesList />
+              }
+            />
+            <Route
+              path="/dm/:friendId"
+              element={
+                <div className="flex h-full">
+                  <div className="w-64 bg-gray-800 border-r border-gray-700 hidden md:block">
+                    <DirectMessagesList />
+                  </div>
+                  <div className="flex-1">
+                    <DirectMessage />
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <DirectMessage />
-                </div>
-              </div>
-            } />
+              }
+            />
             <Route
               path="/"
               element={
