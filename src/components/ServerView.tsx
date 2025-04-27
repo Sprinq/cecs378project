@@ -74,14 +74,19 @@ export default function ServerView() {
     const handleKickEvent = (event: CustomEvent) => {
       // Trigger a refresh of the server list
       window.dispatchEvent(new Event('refresh-server-list'));
+      
+      // If this is the server the user was kicked from, redirect
+      if (event.detail.serverId === serverId) {
+        navigate('/dashboard', { replace: true });
+      }
     };
-
+  
     window.addEventListener('user-kicked-from-server', handleKickEvent as EventListener);
-
+  
     return () => {
       window.removeEventListener('user-kicked-from-server', handleKickEvent as EventListener);
     };
-  }, []);
+  }, [serverId, navigate]);
 
   const fetchServerData = async () => {
     if (!serverId) return;

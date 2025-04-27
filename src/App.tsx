@@ -69,8 +69,9 @@ function App() {
     fetchUserProfile();
   }, [session, showSettings]); // Re-fetch when settings modal closes
 
+  // Start the temporary member checker with 5-second interval
   useEffect(() => {
-    temporaryMemberChecker.start();
+    temporaryMemberChecker.start(5); // Check every 5 seconds
     
     return () => {
       temporaryMemberChecker.stop();

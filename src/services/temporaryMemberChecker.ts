@@ -16,17 +16,17 @@ export class TemporaryMemberChecker {
     return TemporaryMemberChecker.instance;
   }
 
-  public start() {
+  public start(intervalSeconds: number = 5) {
     if (this.isRunning) return;
     this.isRunning = true;
-
+  
     // Check immediately on start
     this.checkExpiredMemberships();
-
-    // Then check every 30 seconds
+  
+    // Then check at the specified interval (default 5 seconds)
     this.checkInterval = setInterval(() => {
       this.checkExpiredMemberships();
-    }, 30000); // 30 seconds
+    }, intervalSeconds * 1000);
   }
 
   public stop() {
@@ -56,13 +56,23 @@ export class TemporaryMemberChecker {
           );
           
           if (expiredMemberships.length > 0) {
-            // Trigger a refresh event for each expired server
-            expiredMemberships.forEach(member => {
-              const event = new CustomEvent('user-temp-access-expired', {
-                detail: { serverId: member.server_id }
+            // Trigger a kick event for each expired server
+            for (const member of expiredMemberships) {
+              // Get server name for the notification
+              const { data: serverData } = await supabase
+                .from('servers')
+                .select('name')
+                .eq('id', member.server_id)
+                .single();
+              
+              const event = new CustomEvent('user-kicked-from-server', {
+                detail: { 
+                  serverId: member.server_id,
+                  serverName: serverData?.name || 'the server'
+                }
               });
               window.dispatchEvent(event);
-            });
+            }
           }
         }
       }
