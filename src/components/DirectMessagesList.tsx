@@ -61,9 +61,10 @@ export default function DirectMessagesList() {
 
       // For each friend, get their last message
       for (const friend of friendsList) {
+        // Get last message
         const { data: messageData } = await supabase
           .from('direct_messages')
-          .select('encrypted_content, iv, created_at, is_encrypted, sender_id, updated_at')
+          .select('encrypted_content, iv, created_at, is_encrypted, sender_id, updated_at, id')
           .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${friend.id}),and(sender_id.eq.${friend.id},receiver_id.eq.${session.user.id})`)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -101,14 +102,26 @@ export default function DirectMessagesList() {
         }
 
         // Get unread count (messages from friend that current user hasn't seen)
-        const { count } = await supabase
-          .from('direct_messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('sender_id', friend.id)
-          .eq('receiver_id', session.user.id)
-          .eq('read', false);
+        const { data: sentMessages } = await supabase
+        .from('direct_messages')
+        .select('id')
+        .eq('sender_id', friend.id)
+        .eq('receiver_id', session.user.id);
 
-        friend.unread_count = count || 0;
+        if (sentMessages) {
+          // Check which messages have been read
+          const messageIds = sentMessages.map(m => m.id);
+          const { data: readMessages } = await supabase
+            .from('dm_read_status')
+            .select('message_id')
+            .eq('user_id', session.user.id)
+            .in('message_id', messageIds);
+
+          const readMessageIds = readMessages?.map(r => r.message_id) || [];
+          friend.unread_count = messageIds.filter(id => !readMessageIds.includes(id)).length;
+        } else {
+          friend.unread_count = 0;
+        }
       }
 
       // Sort by last message time (most recent first)
@@ -133,71 +146,50 @@ export default function DirectMessagesList() {
 
       // Set up real-time subscriptions for all message events (INSERT, UPDATE, DELETE)
       const messagesChannel = supabase
-        .channel(`direct_messages_channel_${session.user.id}`)
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'direct_messages',
-          filter: `receiver_id=eq.${session.user.id}`
-        }, (payload) => {
-          console.log('Message INSERT received (receiver):', payload);
-          fetchFriends();
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'direct_messages',
-          filter: `receiver_id=eq.${session.user.id}`
-        }, (payload) => {
-          console.log('Message UPDATE received (receiver):', payload);
-          fetchFriends();
-        })
-        .on('postgres_changes', {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'direct_messages',
-          filter: `receiver_id=eq.${session.user.id}`
-        }, (payload) => {
-          console.log('Message DELETE received (receiver):', payload);
-          fetchFriends();
-        })
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'direct_messages',
-          filter: `sender_id=eq.${session.user.id}`
-        }, (payload) => {
-          console.log('Message INSERT received (sender):', payload);
-          fetchFriends();
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'direct_messages',
-          filter: `sender_id=eq.${session.user.id}`
-        }, (payload) => {
-          console.log('Message UPDATE received (sender):', payload);
-          fetchFriends();
-        })
-        .on('postgres_changes', {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'direct_messages',
-          filter: `sender_id=eq.${session.user.id}`
-        }, (payload) => {
-          console.log('Message DELETE received (sender):', payload);
-          fetchFriends();
-        })
-        .subscribe((status) => {
-          console.log('Direct messages channel subscription status:', status);
-        });
+      .channel(`direct_messages_channel_${session.user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: `receiver_id=eq.${session.user.id}`
+      }, () => {
+        fetchFriends();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: `sender_id=eq.${session.user.id}`
+      }, () => {
+        fetchFriends();
+      })
+      .subscribe();
 
+      const pollingInterval = setInterval(() => {
+        // Only refresh if we're not currently viewing a DM
+        if (!window.location.pathname.includes('/dashboard/dm/')) {
+          fetchFriends();
+        }
+      }, 2000);
+  
       return () => {
-        console.log('Unsubscribing from direct messages channel');
         messagesChannel.unsubscribe();
+        clearInterval(pollingInterval);
       };
     }
   }, [session, fetchFriends]);
+
+  useEffect(() => {
+    const handleRefreshDMList = () => {
+      fetchFriends();
+    };
+    
+    window.addEventListener('refresh-dm-list', handleRefreshDMList);
+    
+    return () => {
+      window.removeEventListener('refresh-dm-list', handleRefreshDMList);
+    };
+  }, [fetchFriends]);
 
   // Format timestamp
   const formatTime = (timestamp: string | null) => {
@@ -232,24 +224,37 @@ export default function DirectMessagesList() {
     if (!session?.user) return;
     
     try {
-      const { error } = await supabase
+      // Get all unread messages from this friend
+      const { data: unreadMessages } = await supabase
         .from('direct_messages')
-        .update({ read: true })
-        .eq('receiver_id', session.user.id)
+        .select('id')
         .eq('sender_id', friendId)
-        .eq('read', false);
+        .eq('receiver_id', session.user.id);
+  
+      if (unreadMessages && unreadMessages.length > 0) {
+        // Mark all as read
+        const readRecords = unreadMessages.map(m => ({
+          user_id: session.user.id,
+          message_id: m.id,
+          read_at: new Date().toISOString()
+        }));
+  
+        const { error } = await supabase
+          .from('dm_read_status')
+          .upsert(readRecords, { onConflict: 'user_id,message_id' });
         
-      if (error) {
-        console.error('Error marking messages as read:', error);
-        return;
+        if (error) {
+          console.error('Error marking messages as read:', error);
+          return;
+        }
+        
+        // Update local state immediately
+        setFriends(prevFriends => 
+          prevFriends.map(friend => 
+            friend.id === friendId ? { ...friend, unread_count: 0 } : friend
+          )
+        );
       }
-      
-      // Update local state to remove badge
-      setFriends(prevFriends => 
-        prevFriends.map(friend => 
-          friend.id === friendId ? { ...friend, unread_count: 0 } : friend
-        )
-      );
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }

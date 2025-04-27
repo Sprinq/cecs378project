@@ -86,13 +86,14 @@ function App() {
     setShowSettings(!showSettings);
   };
 
+  // src/App.tsx - Update line ~41
   return (
     <Router>
       <div className="h-screen flex flex-col bg-gray-900 text-white">
         <KickNotification />
         {/* Only show the navbar if not on the invite page */}
         {!window.location.pathname.startsWith("/invite/") && (
-          <nav className="bg-gray-800 border-b border-gray-700">
+          <nav className="bg-gray-800 border-b border-gray-700 flex-shrink-0">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex lg:h-16">
                 <div className="flex items-center justify-between lg:flex-row flex-col w-full">
@@ -158,7 +159,7 @@ function App() {
           </nav>
         )}
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden flex flex-col">
           <Routes>
             <Route
               path="/login"

@@ -320,9 +320,9 @@ export default function ServerView() {
 
   useEffect(() => {
     if (!serverId) return;
-
+  
     fetchServerData();
-
+  
     const channelsChannel = supabase
       .channel("channels_changes")
       .on(
@@ -338,7 +338,7 @@ export default function ServerView() {
         }
       )
       .subscribe();
-
+  
     const membersChannel = supabase
       .channel("members_changes")
       .on(
@@ -354,52 +354,37 @@ export default function ServerView() {
         }
       )
       .subscribe();
-
-    // Real-time members subscription
+  
+    // Real-time members subscription with all event types
     const serverMembersChannel = supabase
       .channel(`server_members_${serverId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
           schema: 'public',
           table: 'server_members',
           filter: `server_id=eq.${serverId}`
         },
         () => {
+          console.log('Member change detected, refreshing...');
           fetchServerData();
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'server_members',
-          filter: `server_id=eq.${serverId}`
-        },
-        () => {
-          fetchServerData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'server_members',
-          filter: `server_id=eq.${serverId}`
-        },
-        () => {
-          fetchServerData();
-        }
-      )
-      .subscribe();
-
+      .subscribe((status) => {
+        console.log('Members subscription status:', status);
+      });
+  
+    // Add polling interval for extra reliability (every 5 seconds)
+    const pollingInterval = setInterval(() => {
+      fetchServerData();
+    }, 5000);
+  
     return () => {
       channelsChannel.unsubscribe();
       membersChannel.unsubscribe();
       serverMembersChannel.unsubscribe();
+      clearInterval(pollingInterval);
     };
   }, [serverId, session]);
 

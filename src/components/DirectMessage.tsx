@@ -169,6 +169,13 @@ export default function DirectMessage() {
         
         setMessages(formattedMessages);
         setTimeout(scrollToBottom, 100);
+
+        await supabase
+        .from('direct_messages')
+        .update({ read: true })
+        .eq('receiver_id', session.user.id)
+        .eq('sender_id', friendId)
+        .eq('read', false);
       }
     } catch (err) {
       console.error('Unexpected error fetching messages:', err);
@@ -362,15 +369,51 @@ export default function DirectMessage() {
 
   useEffect(() => {
     if (friendId && session?.user) {
-      const markAsRead = async () => {
-        await supabase
-          .from('direct_messages')
-          .update({ read: true })
-          .eq('receiver_id', session.user.id)
-          .eq('sender_id', friendId)
-          .eq('read', false);
+      const markAllMessagesAsRead = async () => {
+        try {
+          // Get all unread messages from this friend
+          const { data: unreadMessages } = await supabase
+            .from('direct_messages')
+            .select('id')
+            .eq('sender_id', friendId)
+            .eq('receiver_id', session.user.id);
+
+          if (unreadMessages && unreadMessages.length > 0) {
+            // Get messages that are already marked as read
+            const { data: alreadyRead } = await supabase
+              .from('dm_read_status')
+              .select('message_id')
+              .eq('user_id', session.user.id)
+              .in('message_id', unreadMessages.map(m => m.id));
+
+            const alreadyReadIds = alreadyRead?.map(r => r.message_id) || [];
+            const messagesToMarkAsRead = unreadMessages
+              .filter(m => !alreadyReadIds.includes(m.id))
+              .map(m => ({
+                user_id: session.user.id,
+                message_id: m.id,
+                read_at: new Date().toISOString()
+              }));
+
+            if (messagesToMarkAsRead.length > 0) {
+              const { error } = await supabase
+                .from('dm_read_status')
+                .insert(messagesToMarkAsRead);
+              
+              if (error) {
+                console.error('Error marking messages as read:', error);
+              } else {
+                // Trigger a refresh of the DirectMessagesList
+                window.dispatchEvent(new Event('refresh-dm-list'));
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to mark messages as read:', err);
+        }
       };
-      markAsRead();
+      
+      markAllMessagesAsRead();
     }
   }, [friendId, session]);
 
