@@ -76,6 +76,33 @@ export default function ServerView() {
     setError(null);
 
     try {
+      // First check if the user is still a member of this server
+      const { data: memberCheck, error: memberCheckError } = await supabase
+        .from("server_members")
+        .select("user_id")
+        .eq("server_id", serverId)
+        .eq("user_id", session?.user?.id)
+        .maybeSingle();
+
+      if (memberCheckError) {
+        console.error("Error checking membership:", memberCheckError);
+      }
+
+      // If the user is not a member, redirect to dashboard
+      if (!memberCheck && session?.user) {
+        console.log("User is not a member of this server, redirecting...");
+        // Show a notification that they've been removed
+        const event = new CustomEvent('user-kicked-from-server', {
+          detail: {
+            serverId,
+            serverName: server?.name || 'this server'
+          }
+        });
+        window.dispatchEvent(event);
+        navigate("/dashboard", { replace: true });
+        return;
+      }
+
       // Fetch server details
       const { data: serverData, error: serverError } = await supabase
         .from("servers")

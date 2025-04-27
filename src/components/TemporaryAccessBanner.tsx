@@ -3,10 +3,11 @@ import { Timer, AlertCircle } from 'lucide-react';
 
 interface TemporaryAccessBannerProps {
   expiresAt: string | null;
+  serverName?: string;
 }
 
 // This component will be used in ServerView.tsx to show temporary access information
-export default function TemporaryAccessBanner({ expiresAt }: TemporaryAccessBannerProps) {
+export default function TemporaryAccessBanner({ expiresAt, serverName }: TemporaryAccessBannerProps) {
   const [timeDisplay, setTimeDisplay] = useState<string>('');
   const [isExpired, setIsExpired] = useState<boolean>(false);
   
@@ -59,7 +60,7 @@ export default function TemporaryAccessBanner({ expiresAt }: TemporaryAccessBann
     return (
       <div className="bg-red-900 bg-opacity-20 text-red-400 py-2 px-4 text-sm flex items-center">
         <AlertCircle className="h-4 w-4 mr-2" />
-        <span>Your temporary access has expired. You will be removed from this server soon.</span>
+        <span>Your temporary access to {serverName ? `${serverName} ` : ''}has expired. You will be removed from this server soon.</span>
       </div>
     );
   }
@@ -67,7 +68,7 @@ export default function TemporaryAccessBanner({ expiresAt }: TemporaryAccessBann
   return (
     <div className="bg-yellow-900 bg-opacity-20 text-yellow-400 py-2 px-4 text-sm flex items-center">
       <Timer className="h-4 w-4 mr-2" />
-      <span>Temporary access: Your membership expires in {timeDisplay}</span>
+      <span>Temporary access to {serverName ? `${serverName}` : 'this server'}: Your membership expires in {timeDisplay}</span>
     </div>
   );
 }
