@@ -386,10 +386,29 @@ export default function ChannelView() {
     }
   };
 
-  // Format timestamp
+  // Format timestamp with date and time
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const today = new Date();
+    
+    // If the message is from today, just show the time
+    if (date.toDateString() === today.toDateString()) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    
+    // If the message is from yesterday
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Yesterday at ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    }
+    
+    // For older messages, show the full date and time
+    return date.toLocaleDateString([], { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined 
+    }) + ' at ' + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   return (

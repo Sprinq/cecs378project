@@ -240,6 +240,9 @@ export default function JoinServer() {
           alert(`You now have temporary access to the server for ${formatDuration(serverDetails.temporaryDuration)}. You will be automatically removed after this period.`);
         }
         
+        // Trigger server list refresh
+        window.dispatchEvent(new Event('refresh-server-list'));
+        
         navigate(`/dashboard/server/${oldData}`);
         return;
       }
@@ -250,6 +253,9 @@ export default function JoinServer() {
       if (serverDetails.temporaryAccess) {
         alert(`You now have temporary access to the server for ${formatDuration(serverDetails.temporaryDuration)}. You will be automatically removed after this period.`);
       }
+      
+      // Trigger server list refresh
+      window.dispatchEvent(new Event('refresh-server-list'));
       
       navigate(`/dashboard/server/${data}`);
     } catch (err) {

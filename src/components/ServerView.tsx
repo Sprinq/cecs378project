@@ -69,6 +69,20 @@ export default function ServerView() {
     }
   }, [session]);
 
+  // Listen for kick events to update server list
+  useEffect(() => {
+    const handleKickEvent = (event: CustomEvent) => {
+      // Trigger a refresh of the server list
+      window.dispatchEvent(new Event('refresh-server-list'));
+    };
+
+    window.addEventListener('user-kicked-from-server', handleKickEvent as EventListener);
+
+    return () => {
+      window.removeEventListener('user-kicked-from-server', handleKickEvent as EventListener);
+    };
+  }, []);
+
   const fetchServerData = async () => {
     if (!serverId) return;
 
@@ -362,6 +376,8 @@ export default function ServerView() {
       </div>
     );
   }
+
+  
 
   return (
     <div className="flex flex-col h-full">

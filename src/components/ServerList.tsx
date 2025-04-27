@@ -63,6 +63,19 @@ export default function ServerList() {
     }
   }, [session]);
 
+  // Listen for events that require refreshing the server list
+  useEffect(() => {
+    const handleRefreshServerList = () => {
+      fetchServers();
+    };
+
+    window.addEventListener('refresh-server-list', handleRefreshServerList);
+
+    return () => {
+      window.removeEventListener('refresh-server-list', handleRefreshServerList);
+    };
+  }, [fetchServers]);
+
   const handleCreateServerSuccess = (newServerId: string) => {
     setShowCreateServer(false);
     setTimeout(() => {

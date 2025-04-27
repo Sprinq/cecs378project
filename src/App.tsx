@@ -20,6 +20,7 @@ import Register from "./components/Register";
 import Dashboard from "./components/Dashboard";
 import UserSettings from "./components/UserSettings";
 import JoinServer from "./components/JoinServer";
+import KickNotification from "./components/KickNotification";
 import { useAuthStore } from "./stores/authStore";
 import { supabase } from "./lib/supabase";
 
@@ -78,6 +79,7 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-900 text-white">
+        <KickNotification />
         {/* Only show the navbar if not on the invite page */}
         {!window.location.pathname.startsWith("/invite/") && (
           <nav className="bg-gray-800 border-b border-gray-700">
@@ -89,7 +91,7 @@ function App() {
                       <Shield className="h-8 w-8 text-indigo-500" />
                       <span className="ml-2 text-xl font-bold">SecureChat</span>
                     </Link>
-
+  
                     {session && (
                       <div className="pl-8 flex space-x-2">
                         <AppNavLink
@@ -118,13 +120,13 @@ function App() {
                           {username || session.user.email}
                         </span>
                       </div>
-
+  
                       {/* Show encryption status indicator */}
                       <div className="text-green-400 flex items-center text-sm">
                         <Lock className="h-4 w-4 mr-1" />
                         <span>Encrypted</span>
                       </div>
-
+  
                       <button
                         onClick={toggleSettings}
                         className="flex items-center text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
@@ -145,7 +147,7 @@ function App() {
             </div>
           </nav>
         )}
-
+  
         <Routes>
           <Route
             path="/login"
@@ -166,7 +168,7 @@ function App() {
           />
         </Routes>
       </div>
-
+  
       {showSettings && session && <UserSettings onClose={toggleSettings} />}
     </Router>
   );
