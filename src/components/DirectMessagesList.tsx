@@ -227,6 +227,22 @@ export default function DirectMessagesList() {
     return message.length > length ? message.substring(0, length) + '...' : message;
   };
 
+  // Function to mark messages as read
+  const markMessagesAsRead = async (friendId: string) => {
+    if (!session?.user) return;
+    
+    try {
+      await supabase
+        .from('direct_messages')
+        .update({ read: true })
+        .eq('receiver_id', session.user.id)
+        .eq('sender_id', friendId)
+        .eq('read', false);
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-gray-700">
@@ -276,7 +292,10 @@ export default function DirectMessagesList() {
               className={`p-3 flex items-center hover:bg-gray-700 cursor-pointer ${
                 friendId === friend.id ? 'bg-gray-700' : ''
               }`}
-              onClick={() => navigate(`/dashboard/dm/${friend.id}`)}
+              onClick={() => {
+                markMessagesAsRead(friend.id);
+                navigate(`/dashboard/dm/${friend.id}`);
+              }}
             >
               <div className="relative">
                 <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center uppercase text-sm">

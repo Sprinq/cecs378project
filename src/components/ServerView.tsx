@@ -1,3 +1,5 @@
+// src/components/ServerView.tsx
+
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Routes, Route } from "react-router-dom";
 import { supabase } from "../lib/supabase";
@@ -59,23 +61,78 @@ export default function ServerView() {
   const [accessExpiresAt, setAccessExpiresAt] = useState<string | null>(null);
   const [memberToKick, setMemberToKick] = useState<ServerMember | null>(null);
   const [showManageChannels, setShowManageChannels] = useState(false);
+  const [unreadChannels, setUnreadChannels] = useState<Set<string>>(new Set());
   const { session } = useAuthStore();
   const navigate = useNavigate();
 
-  // Debug logging to verify user role and session
-  useEffect(() => {
-    if (session?.user) {
-      console.log("Current user ID:", session.user.id);
-    }
-  }, [session]);
+  // Check for unread messages
+  const checkUnreadChannels = async () => {
+    if (!session?.user || !serverId || channels.length === 0) return;
+    
+    try {
+      // Get all recent messages in all channels
+      const { data: channelMessages } = await supabase
+        .from('messages')
+        .select('channel_id, created_at')
+        .in('channel_id', channels.map(c => c.id))
+        .order('created_at', { ascending: false });
 
-  // Listen for kick events to update server list
+      // Get user's read status
+      const { data: readStatus } = await supabase
+        .from('channel_read_status')
+        .select('channel_id, last_read_at')
+        .eq('user_id', session.user.id)
+        .in('channel_id', channels.map(c => c.id));
+
+      const unread = new Set<string>();
+      
+      channels.forEach(channel => {
+        const lastMessage = channelMessages?.find(m => m.channel_id === channel.id);
+        const lastRead = readStatus?.find(r => r.channel_id === channel.id);
+        
+        if (lastMessage && (!lastRead || new Date(lastMessage.created_at) > new Date(lastRead.last_read_at))) {
+          unread.add(channel.id);
+        }
+      });
+      
+      setUnreadChannels(unread);
+    } catch (error) {
+      console.error('Error checking unread channels:', error);
+    }
+  };
+
+  // Update read status when clicking a channel
+  const handleChannelClick = async (channelId: string) => {
+    setSelectedChannelId(channelId);
+    
+    // Mark channel as read
+    if (session?.user) {
+      try {
+        await supabase
+          .from('channel_read_status')
+          .upsert({
+            user_id: session.user.id,
+            channel_id: channelId,
+            last_read_at: new Date().toISOString()
+          });
+        
+        // Remove from unread set
+        setUnreadChannels(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(channelId);
+          return newSet;
+        });
+      } catch (error) {
+        console.error('Error marking channel as read:', error);
+      }
+    }
+  };
+
+  // Listen for kick events
   useEffect(() => {
     const handleKickEvent = (event: CustomEvent) => {
-      // Trigger a refresh of the server list
       window.dispatchEvent(new Event('refresh-server-list'));
       
-      // If this is the server the user was kicked from, redirect
       if (event.detail.serverId === serverId) {
         navigate('/dashboard', { replace: true });
       }
@@ -111,7 +168,6 @@ export default function ServerView() {
       if (!memberCheck && session?.user) {
         console.log("User is not a member of this server, redirecting...");
         
-        // Try to get the server name before redirecting
         let serverName = 'this server';
         try {
           const { data: serverInfo } = await supabase
@@ -127,7 +183,6 @@ export default function ServerView() {
           console.error("Error fetching server name:", err);
         }
         
-        // Show a notification that they've been removed
         const event = new CustomEvent('user-kicked-from-server', {
           detail: {
             serverId,
@@ -149,12 +204,7 @@ export default function ServerView() {
       if (serverError) throw serverError;
       setServer(serverData);
 
-      // Log the server owner ID for debugging
-      console.log("Server owner ID:", serverData.owner_id);
-
-      // If the current user is the server owner, set their role immediately
       if (session?.user && serverData.owner_id === session.user.id) {
-        console.log("User is the server owner!");
         setUserRole("owner");
       }
 
@@ -168,15 +218,12 @@ export default function ServerView() {
       if (channelsError) throw channelsError;
       setChannels(channelsData || []);
 
-      // If no channel is currently selected or the current channel doesn't exist
       if (channelsData && channelsData.length > 0) {
-        // Check if the current channelId exists in this server
         const currentChannelExists = channelId
           ? channelsData.some((channel) => channel.id === channelId)
           : false;
 
         if (!currentChannelExists) {
-          // Find the general channel or default to the first channel
           const generalChannel = channelsData.find(
             (channel) => channel.name.toLowerCase() === "general"
           );
@@ -184,7 +231,6 @@ export default function ServerView() {
           const defaultChannel = generalChannel || channelsData[0];
           setSelectedChannelId(defaultChannel.id);
 
-          // Navigate to the default channel
           navigate(
             `/dashboard/server/${serverId}/channel/${defaultChannel.id}`,
             { replace: true }
@@ -194,7 +240,7 @@ export default function ServerView() {
         }
       }
 
-      // Fetch server members with user details
+      // Fetch server members
       const { data: membersData, error: membersError } = await supabase
         .from("server_members")
         .select(
@@ -213,7 +259,6 @@ export default function ServerView() {
 
       if (membersError) throw membersError;
 
-      // Transform the nested data structure
       const formattedMembers =
         membersData?.map((member) => ({
           user_id: member.user_id,
@@ -226,31 +271,22 @@ export default function ServerView() {
 
       setMembers(formattedMembers);
 
-      // Get the current user's role and temporary access status
       if (session?.user) {
         const currentUserMember = membersData?.find(
           (member) => member.user_id === session.user.id
         );
 
         if (currentUserMember) {
-          console.log("Found member role:", currentUserMember.role);
           setUserRole(currentUserMember.role);
 
-          // Set temporary access information if applicable
           if (currentUserMember.temporary_access) {
-            console.log(
-              "User has temporary access, expires at:",
-              currentUserMember.access_expires_at
-            );
             setTemporaryAccess(true);
             setAccessExpiresAt(currentUserMember.access_expires_at);
           } else {
-            // Reset temporary access if not temporary on this server
             setTemporaryAccess(false);
             setAccessExpiresAt(null);
           }
         } else {
-          // Reset if user is not found as member (shouldn't happen due to earlier check)
           setTemporaryAccess(false);
           setAccessExpiresAt(null);
           setUserRole("member");
@@ -271,7 +307,6 @@ export default function ServerView() {
 
     fetchServerData();
 
-    // Subscribe to real-time changes
     const channelsChannel = supabase
       .channel("channels_changes")
       .on(
@@ -310,7 +345,34 @@ export default function ServerView() {
     };
   }, [serverId, session]);
 
-  // Effect to update URL when selected channel changes
+  // Check for unread channels when channels list updates
+  useEffect(() => {
+    if (channels.length > 0) {
+      checkUnreadChannels();
+      
+      // Subscribe to new messages to update unread status
+      const messageSubscription = supabase
+        .channel('unread_messages')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `channel_id=in.(${channels.map(c => c.id).join(',')})`
+          },
+          () => {
+            checkUnreadChannels();
+          }
+        )
+        .subscribe();
+      
+      return () => {
+        messageSubscription.unsubscribe();
+      };
+    }
+  }, [channels, session]);
+
   useEffect(() => {
     if (selectedChannelId && serverId) {
       navigate(`/dashboard/server/${serverId}/channel/${selectedChannelId}`, {
@@ -319,40 +381,12 @@ export default function ServerView() {
     }
   }, [selectedChannelId, serverId, navigate]);
 
-  // Effect to sync the selected channel with the URL parameter
   useEffect(() => {
     if (channelId) {
       setSelectedChannelId(channelId);
     }
   }, [channelId]);
 
-  useEffect(() => {
-    // Log whenever user role changes
-    console.log("Current user role:", userRole);
-  }, [userRole]);
-
-  const handleChannelClick = (channelId: string) => {
-    setSelectedChannelId(channelId);
-  };
-
-  const handleKickMember = (member: ServerMember) => {
-    setMemberToKick(member);
-  };
-
-  const handleKickSuccess = () => {
-    setMemberToKick(null);
-    // The real-time subscription will update the members list
-  };
-
-  // Check if user is admin or owner
-  const canInvite = userRole === "owner" || userRole === "admin";
-  const canKick = userRole === "owner" || userRole === "admin";
-
-  // Alternative check - if server exists and current user is the owner
-  const isServerOwner =
-    server && session?.user && server.owner_id === session.user.id;
-
-  // Handle clicking outside of server menu to close it
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (showServerMenu) {
@@ -365,6 +399,19 @@ export default function ServerView() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showServerMenu]);
+
+  const handleKickMember = (member: ServerMember) => {
+    setMemberToKick(member);
+  };
+
+  const handleKickSuccess = () => {
+    setMemberToKick(null);
+  };
+
+  const canInvite = userRole === "owner" || userRole === "admin";
+  const canKick = userRole === "owner" || userRole === "admin";
+  const isServerOwner =
+    server && session?.user && server.owner_id === session.user.id;
 
   if (loading) {
     return (
@@ -382,23 +429,19 @@ export default function ServerView() {
     );
   }
 
-  
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Temporary access banner - show at the top of the page */}
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
       {temporaryAccess && <TemporaryAccessBanner expiresAt={accessExpiresAt} />}
 
-      <div className="flex flex-1 h-0 flex-col lg:flex-row">
+      <div className="flex flex-1 min-h-0">
         {/* Channels sidebar */}
-        <div className="width-full lg:w-64 bg-gray-800 p-4 flex flex-col h-48 lg:h-full">
+        <div className="w-64 bg-gray-800 p-4 flex flex-col overflow-y-auto">
           <div className="mb-6">
             <div className="flex justify-between items-center mb-1">
               <h3 className="font-semibold text-xl text-white">
                 {server.name}
               </h3>
               <div className="flex items-center">
-                {/* Invite button */}
                 {(canInvite || isServerOwner) && (
                   <button
                     onClick={() => setShowInviteModal(true)}
@@ -409,7 +452,6 @@ export default function ServerView() {
                   </button>
                 )}
 
-                {/* Server settings button */}
                 {isServerOwner && (
                   <div className="relative">
                     <button
@@ -423,10 +465,8 @@ export default function ServerView() {
                       <MoreVertical className="h-4 w-4" />
                     </button>
 
-                    {/* Server settings dropdown */}
                     {showServerMenu && (
                       <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
-                        {/* Delete server option */}
                         <button
                           onClick={() => {
                             setShowServerMenu(false);
@@ -476,6 +516,9 @@ export default function ServerView() {
                 >
                   <Hash className="h-4 w-4 mr-2 text-gray-400" />
                   <span>{channel.name}</span>
+                  {unreadChannels.has(channel.id) && (
+                    <div className="ml-auto w-2 h-2 bg-blue-500 rounded-full" />
+                  )}
                 </div>
               ))}
             </div>
@@ -503,12 +546,12 @@ export default function ServerView() {
         </div>
 
         {/* Members sidebar */}
-        <div className="width-full lg:w-56 bg-gray-800 p-4">
+        <div className="w-56 bg-gray-800 p-4 overflow-y-auto">
           <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 flex items-center">
             <Users className="h-3 w-3 mr-1" />
             Members ({members.length})
           </h4>
-          <div className="space-y-2 h-32 overflow-y-auto">
+          <div className="space-y-2">
             {members.map((member) => (
               <div
                 key={member.user_id}
@@ -531,7 +574,6 @@ export default function ServerView() {
                   </div>
                 </div>
 
-                {/* Kick button - only show for owners/admins and not for themselves or the server owner */}
                 {canKick &&
                   member.user_id !== session?.user?.id &&
                   member.role !== "owner" && (
@@ -549,7 +591,7 @@ export default function ServerView() {
         </div>
       </div>
 
-      {/* Server invite modal */}
+      {/* Modals */}
       {showInviteModal && server && (
         <ServerInvite
           serverId={server.id}
@@ -558,7 +600,6 @@ export default function ServerView() {
         />
       )}
 
-      {/* Delete server modal */}
       {showDeleteModal && server && (
         <DeleteServerModal
           serverId={server.id}
@@ -567,7 +608,6 @@ export default function ServerView() {
         />
       )}
 
-      {/* Kick member modal */}
       {memberToKick && server && (
         <KickMemberModal
           serverId={server.id}
@@ -580,7 +620,6 @@ export default function ServerView() {
         />
       )}
 
-      {/* Manage channels modal */}
       {showManageChannels && server && (
         <ManageChannels
           serverId={server.id}
