@@ -375,10 +375,10 @@ export default function ServerView() {
         console.log('Members subscription status:', status);
       });
   
-    // Add polling interval for extra reliability (every 5 seconds)
+    // Add polling interval for extra reliability (every 30 seconds)
     const pollingInterval = setInterval(() => {
       fetchServerData();
-    }, 5000);
+    }, 30000);
   
     return () => {
       channelsChannel.unsubscribe();

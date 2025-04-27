@@ -71,7 +71,7 @@ function App() {
 
   // Start the temporary member checker with 5-second interval
   useEffect(() => {
-    temporaryMemberChecker.start(5); // Check every 5 seconds
+    temporaryMemberChecker.start(30); // Check every 5 seconds
     
     return () => {
       temporaryMemberChecker.stop();
