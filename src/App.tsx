@@ -23,6 +23,7 @@ import JoinServer from "./components/JoinServer";
 import KickNotification from "./components/KickNotification";
 import { useAuthStore } from "./stores/authStore";
 import { supabase } from "./lib/supabase";
+import { temporaryMemberChecker } from './services/temporaryMemberChecker';
 
 // Regular link component instead of NavLink
 function AppNavLink({
@@ -67,6 +68,14 @@ function App() {
 
     fetchUserProfile();
   }, [session, showSettings]); // Re-fetch when settings modal closes
+
+  useEffect(() => {
+    temporaryMemberChecker.start();
+    
+    return () => {
+      temporaryMemberChecker.stop();
+    };
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
