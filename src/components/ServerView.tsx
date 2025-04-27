@@ -95,6 +95,11 @@ export default function ServerView() {
         }
       });
       
+      // Remove the currently selected channel from unread set
+      if (selectedChannelId) {
+        unread.delete(selectedChannelId);
+      }
+      
       setUnreadChannels(unread);
     } catch (error) {
       console.error('Error checking unread channels:', error);
@@ -235,6 +240,17 @@ export default function ServerView() {
             `/dashboard/server/${serverId}/channel/${defaultChannel.id}`,
             { replace: true }
           );
+          
+          // Mark the default channel as read immediately
+          if (session?.user) {
+            await supabase
+              .from('channel_read_status')
+              .upsert({
+                user_id: session.user.id,
+                channel_id: defaultChannel.id,
+                last_read_at: new Date().toISOString()
+              });
+          }
         } else {
           setSelectedChannelId(channelId || null);
         }
@@ -339,9 +355,51 @@ export default function ServerView() {
       )
       .subscribe();
 
+    // Real-time members subscription
+    const serverMembersChannel = supabase
+      .channel(`server_members_${serverId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'server_members',
+          filter: `server_id=eq.${serverId}`
+        },
+        () => {
+          fetchServerData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'server_members',
+          filter: `server_id=eq.${serverId}`
+        },
+        () => {
+          fetchServerData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'server_members',
+          filter: `server_id=eq.${serverId}`
+        },
+        () => {
+          fetchServerData();
+        }
+      )
+      .subscribe();
+
     return () => {
       channelsChannel.unsubscribe();
       membersChannel.unsubscribe();
+      serverMembersChannel.unsubscribe();
     };
   }, [serverId, session]);
 
@@ -349,6 +407,9 @@ export default function ServerView() {
   useEffect(() => {
     if (channels.length > 0) {
       checkUnreadChannels();
+      
+      // Set up interval to check for unread messages every 5 seconds
+      const unreadInterval = setInterval(checkUnreadChannels, 5000);
       
       // Subscribe to new messages to update unread status
       const messageSubscription = supabase
@@ -368,10 +429,11 @@ export default function ServerView() {
         .subscribe();
       
       return () => {
+        clearInterval(unreadInterval);
         messageSubscription.unsubscribe();
       };
     }
-  }, [channels, session]);
+  }, [channels, session, selectedChannelId]);
 
   useEffect(() => {
     if (selectedChannelId && serverId) {
