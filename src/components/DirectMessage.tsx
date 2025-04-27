@@ -360,6 +360,20 @@ export default function DirectMessage() {
     }) + ' at ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  useEffect(() => {
+    if (friendId && session?.user) {
+      const markAsRead = async () => {
+        await supabase
+          .from('direct_messages')
+          .update({ read: true })
+          .eq('receiver_id', session.user.id)
+          .eq('sender_id', friendId)
+          .eq('read', false);
+      };
+      markAsRead();
+    }
+   }, [friendId, session]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}

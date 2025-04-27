@@ -56,8 +56,8 @@ export default function ChannelView() {
   );
 
   // Scroll to bottom of messages
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   const fetchMessages = async () => {
@@ -176,7 +176,6 @@ export default function ChannelView() {
 
         console.log("Formatted messages:", formattedMessages);
         setMessages(formattedMessages);
-        setTimeout(scrollToBottom, 100);
       }
     } catch (err) {
       console.error("Unexpected error fetching messages:", err);
