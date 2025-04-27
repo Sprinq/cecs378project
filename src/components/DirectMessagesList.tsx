@@ -238,6 +238,13 @@ export default function DirectMessagesList() {
         .eq('receiver_id', session.user.id)
         .eq('sender_id', friendId)
         .eq('read', false);
+        
+      // Update the local state to immediately remove the unread count
+      setFriends(prevFriends => 
+        prevFriends.map(friend => 
+          friend.id === friendId ? { ...friend, unread_count: 0 } : friend
+        )
+      );
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }

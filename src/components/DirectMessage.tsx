@@ -372,7 +372,7 @@ export default function DirectMessage() {
       };
       markAsRead();
     }
-   }, [friendId, session]);
+  }, [friendId, session]);
 
   return (
     <div className="flex flex-col h-full">

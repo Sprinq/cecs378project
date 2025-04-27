@@ -88,7 +88,7 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gray-900 text-white">
+      <div className="h-screen flex flex-col bg-gray-900 text-white">
         <KickNotification />
         {/* Only show the navbar if not on the invite page */}
         {!window.location.pathname.startsWith("/invite/") && (
@@ -101,7 +101,7 @@ function App() {
                       <Shield className="h-8 w-8 text-indigo-500" />
                       <span className="ml-2 text-xl font-bold">SecureChat</span>
                     </Link>
-  
+
                     {session && (
                       <div className="pl-8 flex space-x-2">
                         <AppNavLink
@@ -130,13 +130,13 @@ function App() {
                           {username || session.user.email}
                         </span>
                       </div>
-  
+
                       {/* Show encryption status indicator */}
                       <div className="text-green-400 flex items-center text-sm">
                         <Lock className="h-4 w-4 mr-1" />
                         <span>Encrypted</span>
                       </div>
-  
+
                       <button
                         onClick={toggleSettings}
                         className="flex items-center text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
@@ -157,28 +157,30 @@ function App() {
             </div>
           </nav>
         )}
-  
-        <Routes>
-          <Route
-            path="/login"
-            element={session ? <Navigate to="/dashboard" /> : <Login />}
-          />
-          <Route
-            path="/register"
-            element={session ? <Navigate to="/dashboard" /> : <Register />}
-          />
-          <Route
-            path="/dashboard/*"
-            element={session ? <Dashboard /> : <Navigate to="/login" />}
-          />
-          <Route path="/invite/:inviteCode" element={<JoinServer />} />
-          <Route
-            path="/"
-            element={<Navigate to={session ? "/dashboard" : "/login"} />}
-          />
-        </Routes>
+
+        <div className="flex-1 overflow-hidden">
+          <Routes>
+            <Route
+              path="/login"
+              element={session ? <Navigate to="/dashboard" /> : <Login />}
+            />
+            <Route
+              path="/register"
+              element={session ? <Navigate to="/dashboard" /> : <Register />}
+            />
+            <Route
+              path="/dashboard/*"
+              element={session ? <Dashboard /> : <Navigate to="/login" />}
+            />
+            <Route path="/invite/:inviteCode" element={<JoinServer />} />
+            <Route
+              path="/"
+              element={<Navigate to={session ? "/dashboard" : "/login"} />}
+            />
+          </Routes>
+        </div>
       </div>
-  
+
       {showSettings && session && <UserSettings onClose={toggleSettings} />}
     </Router>
   );

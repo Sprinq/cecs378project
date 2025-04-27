@@ -64,7 +64,7 @@ export default function Dashboard() {
   const isDashboardRoot = location.pathname === "/dashboard";
 
   return (
-    <div className="flex h-screen bg-gray-900">
+    <div className="flex h-full bg-gray-900">
       <ServerList />
       <div className="flex flex-col flex-1">
         <div className="flex-1 overflow-hidden">
@@ -93,7 +93,7 @@ export default function Dashboard() {
                   <div className="w-64 bg-gray-800 border-r border-gray-700 hidden md:block">
                     <DirectMessagesList />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 overflow-hidden">
                     <DirectMessage />
                   </div>
                 </div>
