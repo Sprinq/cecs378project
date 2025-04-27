@@ -232,14 +232,19 @@ export default function DirectMessagesList() {
     if (!session?.user) return;
     
     try {
-      await supabase
+      const { error } = await supabase
         .from('direct_messages')
         .update({ read: true })
         .eq('receiver_id', session.user.id)
         .eq('sender_id', friendId)
         .eq('read', false);
         
-      // Update the local state to immediately remove the unread count
+      if (error) {
+        console.error('Error marking messages as read:', error);
+        return;
+      }
+      
+      // Update local state to remove badge
       setFriends(prevFriends => 
         prevFriends.map(friend => 
           friend.id === friendId ? { ...friend, unread_count: 0 } : friend

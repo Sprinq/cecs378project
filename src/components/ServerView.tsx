@@ -492,7 +492,7 @@ export default function ServerView() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <div className="flex flex-col h-full">
       {temporaryAccess && <TemporaryAccessBanner expiresAt={accessExpiresAt} />}
 
       <div className="flex flex-1 min-h-0">
