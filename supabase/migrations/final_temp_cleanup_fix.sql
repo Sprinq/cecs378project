@@ -1,12 +1,16 @@
--- Migration file: supabase/migrations/20250501_fix_temporary_member_removal_v2.sql
+-- Migration file: supabase/migrations/20250504_fix_temp_cleanup_no_recursion.sql
 
--- Drop the existing function if it exists
+-- First, drop the problematic trigger
+DROP TRIGGER IF EXISTS auto_cleanup_expired_members ON public.server_members;
+DROP FUNCTION IF EXISTS trigger_cleanup_on_access();
+
+-- Drop existing cleanup functions
 DROP FUNCTION IF EXISTS remove_expired_temporary_members();
-
--- Drop the existing cleanup function if it exists
 DROP FUNCTION IF EXISTS cleanup_expired_members();
+DROP FUNCTION IF EXISTS test_expire_member(UUID, UUID);
+DROP FUNCTION IF EXISTS expire_and_cleanup_user(UUID);
 
--- Create a new, simplified function that directly removes expired members
+-- Create a simpler cleanup function
 CREATE OR REPLACE FUNCTION cleanup_expired_members()
 RETURNS INTEGER
 LANGUAGE plpgsql
@@ -15,27 +19,42 @@ AS $$
 DECLARE
   removed_count INTEGER;
 BEGIN
-  -- Delete all expired temporary members
-  WITH deleted_members AS (
-    DELETE FROM public.server_members
-    WHERE temporary_access = true
-      AND access_expires_at IS NOT NULL
-      AND access_expires_at < CURRENT_TIMESTAMP
-    RETURNING *
-  )
-  SELECT COUNT(*) INTO removed_count FROM deleted_members;
+  -- Delete expired temporary members
+  DELETE FROM public.server_members
+  WHERE temporary_access = true
+    AND access_expires_at IS NOT NULL
+    AND access_expires_at <= CURRENT_TIMESTAMP;
   
-  -- Log the removal count for debugging
-  IF removed_count > 0 THEN
-    RAISE NOTICE 'Removed % expired temporary members', removed_count;
-  END IF;
+  GET DIAGNOSTICS removed_count = ROW_COUNT;
   
-  RETURN removed_count;
+  RETURN COALESCE(removed_count, 0);
 END;
 $$;
 
--- Update the trigger to ensure access_expires_at is always set for temporary members
-CREATE OR REPLACE FUNCTION update_access_expiry()
+-- Create a function to test expiration without the complex logic
+CREATE OR REPLACE FUNCTION test_expire_member(
+  p_server_id UUID,
+  p_user_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Update the member to be expired
+  UPDATE public.server_members
+  SET access_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 minute'
+  WHERE server_id = p_server_id
+    AND user_id = p_user_id
+    AND temporary_access = true;
+  
+  -- Return success
+  RETURN FOUND;
+END;
+$$;
+
+-- Create a trigger that only sets access_expires_at on INSERT or UPDATE
+CREATE OR REPLACE FUNCTION set_access_expiry()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -66,13 +85,14 @@ BEGIN
 END;
 $$;
 
+-- Create the trigger only for INSERT and UPDATE
 DROP TRIGGER IF EXISTS server_members_expiry_trigger ON public.server_members;
 CREATE TRIGGER server_members_expiry_trigger
 BEFORE INSERT OR UPDATE ON public.server_members
 FOR EACH ROW
-EXECUTE FUNCTION update_access_expiry();
+EXECUTE FUNCTION set_access_expiry();
 
--- Fix any existing temporary members without access_expires_at
+-- Ensure all temporary members have access_expires_at set
 UPDATE public.server_members
 SET 
   joined_at = COALESCE(joined_at, CURRENT_TIMESTAMP),
@@ -83,7 +103,8 @@ SET
       WHEN temporary_duration = '24h' THEN COALESCE(joined_at, CURRENT_TIMESTAMP) + INTERVAL '24 hours'
       WHEN temporary_duration = '7d' THEN COALESCE(joined_at, CURRENT_TIMESTAMP) + INTERVAL '7 days'
       WHEN temporary_duration = '30d' THEN COALESCE(joined_at, CURRENT_TIMESTAMP) + INTERVAL '30 days'
-      ELSE COALESCE(joined_at, CURRENT_TIMESTAMP) + temporary_duration::INTERVAL
+      WHEN temporary_duration IS NOT NULL THEN COALESCE(joined_at, CURRENT_TIMESTAMP) + temporary_duration::INTERVAL
+      ELSE NULL
     END
   )
 WHERE temporary_access = true
@@ -100,14 +121,14 @@ BEGIN
     -- Unschedule existing job if it exists
     PERFORM cron.unschedule('remove-expired-members');
     
-    -- Create new scheduled job to run every minute for testing (change to longer interval in production)
+    -- Create new scheduled job to run every 5 minutes
     PERFORM cron.schedule(
       'remove-expired-members',
-      '* * * * *',  -- Every minute
+      '*/5 * * * *',  -- Every 5 minutes
       'SELECT cleanup_expired_members()'
     );
     
-    RAISE NOTICE 'Scheduled cron job to run every minute';
+    RAISE NOTICE 'Scheduled cron job to run every 5 minutes';
   ELSE
     RAISE NOTICE 'pg_cron extension not available. Please set up an external scheduler to call cleanup_expired_members() regularly.';
   END IF;

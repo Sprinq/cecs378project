@@ -91,11 +91,28 @@ export default function ServerView() {
       // If the user is not a member, redirect to dashboard
       if (!memberCheck && session?.user) {
         console.log("User is not a member of this server, redirecting...");
+        
+        // Try to get the server name before redirecting
+        let serverName = 'this server';
+        try {
+          const { data: serverInfo } = await supabase
+            .from("servers")
+            .select("name")
+            .eq("id", serverId)
+            .single();
+          
+          if (serverInfo) {
+            serverName = serverInfo.name;
+          }
+        } catch (err) {
+          console.error("Error fetching server name:", err);
+        }
+        
         // Show a notification that they've been removed
         const event = new CustomEvent('user-kicked-from-server', {
           detail: {
             serverId,
-            serverName: server?.name || 'this server'
+            serverName
           }
         });
         window.dispatchEvent(event);
@@ -208,7 +225,16 @@ export default function ServerView() {
             );
             setTemporaryAccess(true);
             setAccessExpiresAt(currentUserMember.access_expires_at);
+          } else {
+            // Reset temporary access if not temporary on this server
+            setTemporaryAccess(false);
+            setAccessExpiresAt(null);
           }
+        } else {
+          // Reset if user is not found as member (shouldn't happen due to earlier check)
+          setTemporaryAccess(false);
+          setAccessExpiresAt(null);
+          setUserRole("member");
         }
       }
     } catch (err) {

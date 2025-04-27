@@ -60,7 +60,7 @@ export default function TemporaryAccessBanner({ expiresAt, serverName }: Tempora
     return (
       <div className="bg-red-900 bg-opacity-20 text-red-400 py-2 px-4 text-sm flex items-center">
         <AlertCircle className="h-4 w-4 mr-2" />
-        <span>Your temporary access to {serverName ? `${serverName} ` : ''}has expired. You will be removed from this server soon.</span>
+        <span>Your temporary access to {serverName || 'this server'} has expired. You will be removed from this server soon.</span>
       </div>
     );
   }
@@ -68,7 +68,7 @@ export default function TemporaryAccessBanner({ expiresAt, serverName }: Tempora
   return (
     <div className="bg-yellow-900 bg-opacity-20 text-yellow-400 py-2 px-4 text-sm flex items-center">
       <Timer className="h-4 w-4 mr-2" />
-      <span>Temporary access to {serverName ? `${serverName}` : 'this server'}: Your membership expires in {timeDisplay}</span>
+      <span>Temporary access to {serverName || 'this server'}: Your membership expires in {timeDisplay}</span>
     </div>
   );
 }
