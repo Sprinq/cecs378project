@@ -65,6 +65,7 @@ export default function ServerView() {
   const { session } = useAuthStore();
   const navigate = useNavigate();
   const deletionInProgress = useRef(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Check for unread messages
   const checkUnreadChannels = async () => {
@@ -436,15 +437,20 @@ export default function ServerView() {
   }, [channelId]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showServerMenu) {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowServerMenu(false);
       }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
+    }
+  
+    // Add event listener when menu is showing
+    if (showServerMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    // Clean up the event listener
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showServerMenu]);
 
@@ -514,34 +520,34 @@ export default function ServerView() {
                   </button>
                 )}
                   {isServerOwner && (
-                    <div className="relative">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowServerMenu(!showServerMenu);
-                        }}
-                        className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
-                        title="Server Settings"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+                  <div className="relative" ref={menuRef}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowServerMenu(!showServerMenu);
+                      }}
+                      className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
+                      title="Server Settings"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
 
-                      {showServerMenu && (
-                        <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
-                          <button
-                            onClick={() => {
-                              setShowServerMenu(false);
-                              setShowDeleteModal(true);
-                            }}
-                            className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
-                          >
-                            <Trash className="h-4 w-4 mr-2" />
-                            Delete Server
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    {showServerMenu && (
+                      <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
+                        <button
+                          onClick={() => {
+                            setShowServerMenu(false);
+                            setShowDeleteModal(true);
+                          }}
+                          className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
+                        >
+                          <Trash className="h-4 w-4 mr-2" />
+                          Delete Server
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             {server.description && (

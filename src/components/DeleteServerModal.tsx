@@ -18,7 +18,11 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
   const navigate = useNavigate();
   const { session } = useAuthStore();
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent any default button behavior
+    e.preventDefault();
+    
+    // Validate the confirmation text
     if (confirmText !== serverName) {
       setError(`Please type "${serverName}" to confirm deletion`);
       return;
@@ -31,81 +35,90 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
       setDeleteStep('Starting deletion process...');
       console.log("Attempting to delete server:", serverId);
       
-      // Explicitly delete all related data manually
-      // 1. First delete server members
-      setDeleteStep('Removing server members...');
-      console.log("Deleting server members...");
-      await supabase
-        .from('server_members')
-        .delete()
-        .eq('server_id', serverId);
+      // First try using the RPC function (safest approach)
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        'delete_server',
+        { server_id: serverId }
+      );
       
-      // 2. Delete server invites
-      setDeleteStep('Removing server invites...');
-      console.log("Deleting server invites...");
-      await supabase
-        .from('server_invites')
-        .delete()
-        .eq('server_id', serverId);
-      
-      // 3. Get channels to delete their messages
-      setDeleteStep('Finding channels to delete...');
-      console.log("Fetching channels to delete messages...");
-      const { data: channels } = await supabase
-        .from('channels')
-        .select('id')
-        .eq('server_id', serverId);
-      
-      if (channels && channels.length > 0) {
-        const channelIds = channels.map(c => c.id);
+      // If RPC fails, try direct deletion
+      if (rpcError) {
+        console.log("RPC deletion failed, attempting direct deletion:", rpcError);
         
-        // 4. Delete messages in those channels
-        setDeleteStep('Deleting channel messages...');
-        console.log("Deleting messages from channels:", channelIds);
-        for (const channelId of channelIds) {
-          await supabase
-            .from('messages')
-            .delete()
-            .eq('channel_id', channelId);
-        }
-        
-        // 5. Delete the channels
-        setDeleteStep('Removing channels...');
-        console.log("Deleting channels...");
+        // Explicitly delete all related data manually to ensure proper cleanup
+        setDeleteStep('Removing server members...');
         await supabase
-          .from('channels')
+          .from('server_members')
           .delete()
           .eq('server_id', serverId);
+        
+        setDeleteStep('Removing server invites...');
+        await supabase
+          .from('server_invites')
+          .delete()
+          .eq('server_id', serverId);
+        
+        // Get channels to delete their messages
+        setDeleteStep('Finding channels to delete...');
+        const { data: channels } = await supabase
+          .from('channels')
+          .select('id')
+          .eq('server_id', serverId);
+        
+        if (channels && channels.length > 0) {
+          const channelIds = channels.map(c => c.id);
+          
+          // Delete messages in those channels
+          setDeleteStep('Deleting channel messages...');
+          for (const channelId of channelIds) {
+            await supabase
+              .from('messages')
+              .delete()
+              .eq('channel_id', channelId);
+          }
+          
+          // Delete the channels
+          setDeleteStep('Removing channels...');
+          await supabase
+            .from('channels')
+            .delete()
+            .eq('server_id', serverId);
+        }
+        
+        // Finally delete the server itself
+        setDeleteStep('Deleting the server...');
+        const { error: serverError } = await supabase
+          .from('servers')
+          .delete()
+          .eq('id', serverId)
+          .eq('owner_id', session?.user?.id); // Ensure user is owner
+        
+        if (serverError) {
+          throw serverError;
+        }
       }
       
-      // 6. Finally delete the server itself
-      setDeleteStep('Deleting the server...');
-      console.log("Deleting server...");
-      const { error: serverError } = await supabase
-        .from('servers')
-        .delete()
-        .eq('id', serverId)
-        .eq('owner_id', session?.user?.id); // Ensure user is owner
-      
-      if (serverError) {
-        console.error("Server deletion error:", serverError);
-        throw serverError;
-      }
-      
-      console.log("Server deletion successful! Redirecting...");
       setDeleteStep('Success! Redirecting...');
       
-      // 7. Trigger server list refresh
+      // Trigger server list refresh and server deleted event
       window.dispatchEvent(new Event('refresh-server-list'));
       window.dispatchEvent(new CustomEvent('server-deleted'));
       
-      // 8. Navigate away and close modal
+      // Navigate away and close modal
       navigate('/dashboard', { replace: true });
       onClose();
+      
     } catch (err) {
       console.error("Error deleting server:", err);
       setError(err instanceof Error ? err.message : 'Failed to delete the server');
       setLoading(false);
+    }
+  };
+
+  // Function to handle pressing Enter key in the confirmation field
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && confirmText === serverName && !loading) {
+      handleDelete(e as unknown as React.MouseEvent<HTMLButtonElement>);
     }
   };
 
@@ -148,6 +161,7 @@ export default function DeleteServerModal({ serverId, serverName, onClose }: Del
             type="text"
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-red-500"
             placeholder={`Type ${serverName} to confirm`}
             disabled={loading}

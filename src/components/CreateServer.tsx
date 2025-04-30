@@ -23,17 +23,21 @@ export default function CreateServer({ onClose, onSuccess }: CreateServerProps) 
     setError(null);
   
     try {
-      // Create server and get the ID
+      console.log("Creating server with name:", name, "and description:", description);
+      
+      // Try using the RPC function first (with explicit parameter names)
+      console.log("Attempting to use RPC function...");
       const { data, error: serverError } = await supabase.rpc(
         'create_server_with_channels',
         { 
-          server_name: name,
-          server_description: description
+          "server_name": name,
+          "server_description": description
         }
       );
   
       if (serverError) {
-        console.log("RPC error, falling back to manual creation:", serverError);
+        console.error("RPC error, details:", serverError);
+        console.log("Falling back to manual creation");
         
         // Fall back to manual server creation
         const { data: manualData, error: manualError } = await supabase
@@ -47,10 +51,14 @@ export default function CreateServer({ onClose, onSuccess }: CreateServerProps) 
           .single();
           
         if (manualError) {
+          console.error("Manual server creation error:", manualError);
           throw manualError;
         }
         
+        console.log("Server created successfully with ID:", manualData.id);
+        
         // Add the user as a permanent owner
+        console.log("Adding user as server owner");
         const { error: memberError } = await supabase
           .from('server_members')
           .insert({
@@ -65,33 +73,19 @@ export default function CreateServer({ onClose, onSuccess }: CreateServerProps) 
           console.error("Error adding member:", memberError);
         }
         
-        // Create default channels manually
-        const { error: channelsError } = await supabase
-          .from('channels')
-          .insert([
-            {
-              server_id: manualData.id,
-              name: 'general',
-              description: 'General discussion channel'
-            },
-            {
-              server_id: manualData.id,
-              name: 'welcome',
-              description: 'Welcome new members'
-            }
-          ]);
-          
-        if (channelsError) {
-          console.error("Error creating channels:", channelsError);
-        }
+        // Create BOTH default channels manually
+        console.log("Creating default channels: general and welcome");
+        await createDefaultChannels(manualData.id);
         
         // Call success callback
         if (onSuccess) {
+          console.log("Calling onSuccess with server ID:", manualData.id);
           onSuccess(manualData.id);
         } else {
           onClose();
         }
       } else if (data && onSuccess) {
+        console.log("RPC function succeeded with server ID:", data);
         onSuccess(data);
       } else {
         onClose();
@@ -101,6 +95,43 @@ export default function CreateServer({ onClose, onSuccess }: CreateServerProps) 
       setError(err instanceof Error ? err.message : 'Failed to create server');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Helper function to create default channels
+  const createDefaultChannels = async (serverId: string) => {
+    try {
+      // Create general channel
+      const { error: generalError } = await supabase
+        .from('channels')
+        .insert({
+          server_id: serverId,
+          name: 'general',
+          description: 'General discussion channel'
+        });
+
+      if (generalError) {
+        console.error("Error creating general channel:", generalError);
+      } else {
+        console.log("General channel created successfully");
+      }
+
+      // Create welcome channel
+      const { error: welcomeError } = await supabase
+        .from('channels')
+        .insert({
+          server_id: serverId,
+          name: 'welcome',
+          description: 'Welcome new members'
+        });
+
+      if (welcomeError) {
+        console.error("Error creating welcome channel:", welcomeError);
+      } else {
+        console.log("Welcome channel created successfully");
+      }
+    } catch (error) {
+      console.error("Error creating default channels:", error);
     }
   };
 
