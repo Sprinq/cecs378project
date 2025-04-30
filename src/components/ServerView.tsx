@@ -1,6 +1,6 @@
 // src/components/ServerView.tsx
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, Routes, Route } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import {
@@ -64,6 +64,7 @@ export default function ServerView() {
   const [unreadChannels, setUnreadChannels] = useState<Set<string>>(new Set());
   const { session } = useAuthStore();
   const navigate = useNavigate();
+  const deletionInProgress = useRef(false);
 
   // Check for unread messages
   const checkUnreadChannels = async () => {
@@ -455,6 +456,20 @@ export default function ServerView() {
     setMemberToKick(null);
   };
 
+  useEffect(() => {
+    const handleServerDeleted = () => {
+      console.log("Server deleted");
+      window.dispatchEvent(new Event('refresh-server-list'));
+      navigate('/dashboard', { replace: true });
+    };
+    
+    window.addEventListener('server-deleted', handleServerDeleted);
+    
+    return () => {
+      window.removeEventListener('server-deleted', handleServerDeleted);
+    };
+  }, [navigate]);
+
   const canInvite = userRole === "owner" || userRole === "admin";
   const canKick = userRole === "owner" || userRole === "admin";
   const isServerOwner =
@@ -498,36 +513,35 @@ export default function ServerView() {
                     <LinkIcon className="h-4 w-4" />
                   </button>
                 )}
+                  {isServerOwner && (
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowServerMenu(!showServerMenu);
+                        }}
+                        className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
+                        title="Server Settings"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
 
-                {isServerOwner && (
-                  <div className="relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowServerMenu(!showServerMenu);
-                      }}
-                      className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
-                      title="Server Settings"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
-
-                    {showServerMenu && (
-                      <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
-                        <button
-                          onClick={() => {
-                            setShowServerMenu(false);
-                            setShowDeleteModal(true);
-                          }}
-                          className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
-                        >
-                          <Trash className="h-4 w-4 mr-2" />
-                          Delete Server
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      {showServerMenu && (
+                        <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
+                          <button
+                            onClick={() => {
+                              setShowServerMenu(false);
+                              setShowDeleteModal(true);
+                            }}
+                            className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
+                          >
+                            <Trash className="h-4 w-4 mr-2" />
+                            Delete Server
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
               </div>
             </div>
             {server.description && (

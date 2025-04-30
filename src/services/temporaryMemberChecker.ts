@@ -46,13 +46,16 @@ export class TemporaryMemberChecker {
         // Check if we need to redirect the current user
         const { data: memberData } = await supabase
           .from('server_members')
-          .select('server_id, temporary_access, access_expires_at')
+          .select('server_id, temporary_access, access_expires_at, role')
           .eq('user_id', session.user.id)
           .eq('temporary_access', true);
         
         if (memberData) {
+          // Don't remove server owners regardless of temporary access
           const expiredMemberships = memberData.filter(
-            member => member.access_expires_at && new Date(member.access_expires_at) < new Date()
+            member => member.role !== 'owner' && 
+                      member.access_expires_at && 
+                      new Date(member.access_expires_at) < new Date()
           );
           
           if (expiredMemberships.length > 0) {
@@ -84,7 +87,7 @@ export class TemporaryMemberChecker {
         console.error('Error calling cleanup_expired_members:', error);
         return;
       }
-
+  
       if (data > 0) {
         console.log(`Removed ${data} expired temporary members`);
         
@@ -100,37 +103,6 @@ export class TemporaryMemberChecker {
       }
     } catch (err) {
       console.error('Error checking expired memberships:', err);
-    }
-  }
-
-  // Manual trigger for immediate cleanup
-  public async checkNow(): Promise<number> {
-    try {
-      const { data, error } = await supabase.rpc('cleanup_expired_members');
-      
-      if (error) {
-        console.error('Error calling cleanup_expired_members:', error);
-        return 0;
-      }
-
-      if (data > 0) {
-        console.log(`Removed ${data} expired temporary members`);
-        
-        // Trigger refresh event
-        const event = new CustomEvent('temporary-members-removed', { detail: { count: data } });
-        window.dispatchEvent(event);
-        
-        // Also trigger a manual refresh of the current page
-        if (window.location.pathname.includes('/dashboard/server/')) {
-          const refreshEvent = new Event('refresh-server-data');
-          window.dispatchEvent(refreshEvent);
-        }
-      }
-
-      return data || 0;
-    } catch (err) {
-      console.error('Error checking expired memberships:', err);
-      return 0;
     }
   }
 }

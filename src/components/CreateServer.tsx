@@ -21,7 +21,7 @@ export default function CreateServer({ onClose, onSuccess }: CreateServerProps) 
     
     setLoading(true);
     setError(null);
-
+  
     try {
       // Create server and get the ID
       const { data, error: serverError } = await supabase.rpc(
@@ -31,8 +31,10 @@ export default function CreateServer({ onClose, onSuccess }: CreateServerProps) 
           server_description: description
         }
       );
-
+  
       if (serverError) {
+        console.log("RPC error, falling back to manual creation:", serverError);
+        
         // Fall back to manual server creation
         const { data: manualData, error: manualError } = await supabase
           .from('servers')
@@ -46,6 +48,41 @@ export default function CreateServer({ onClose, onSuccess }: CreateServerProps) 
           
         if (manualError) {
           throw manualError;
+        }
+        
+        // Add the user as a permanent owner
+        const { error: memberError } = await supabase
+          .from('server_members')
+          .insert({
+            server_id: manualData.id,
+            user_id: session.user.id,
+            role: 'owner',
+            temporary_access: false,
+            joined_at: new Date().toISOString()
+          });
+          
+        if (memberError) {
+          console.error("Error adding member:", memberError);
+        }
+        
+        // Create default channels manually
+        const { error: channelsError } = await supabase
+          .from('channels')
+          .insert([
+            {
+              server_id: manualData.id,
+              name: 'general',
+              description: 'General discussion channel'
+            },
+            {
+              server_id: manualData.id,
+              name: 'welcome',
+              description: 'Welcome new members'
+            }
+          ]);
+          
+        if (channelsError) {
+          console.error("Error creating channels:", channelsError);
         }
         
         // Call success callback
