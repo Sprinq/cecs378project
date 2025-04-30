@@ -1,5 +1,3 @@
-// src/components/ServerView.tsx
-
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, Routes, Route } from "react-router-dom";
 import { supabase } from "../lib/supabase";
@@ -12,6 +10,8 @@ import {
   MoreVertical,
   UserX,
   Plus,
+  ArrowLeft,
+  Menu
 } from "lucide-react";
 import ChannelView from "./ChannelView";
 import ServerInvite from "./ServerInvite";
@@ -43,6 +43,9 @@ interface ServerMember {
   access_expires_at?: string | null;
 }
 
+// Mobile navigation view states
+type MobileView = "channels" | "chat" | "members";
+
 export default function ServerView() {
   const { serverId, channelId } = useParams();
   const [server, setServer] = useState<Server | null>(null);
@@ -62,10 +65,36 @@ export default function ServerView() {
   const [memberToKick, setMemberToKick] = useState<ServerMember | null>(null);
   const [showManageChannels, setShowManageChannels] = useState(false);
   const [unreadChannels, setUnreadChannels] = useState<Set<string>>(new Set());
+  
+  // Mobile UI state
+  const [mobileView, setMobileView] = useState<MobileView>("channels");
+  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
+  
   const { session } = useAuthStore();
   const navigate = useNavigate();
   const deletionInProgress = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Handle screen size changes
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      // If we're on desktop, always show all panels
+      if (window.innerWidth >= 768) {
+        setMobileView("channels");
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Update mobile view when channel is selected
+  useEffect(() => {
+    if (channelId && isMobile) {
+      setMobileView("chat");
+    }
+  }, [channelId, isMobile]);
 
   // Check for unread messages
   const checkUnreadChannels = async () => {
@@ -111,6 +140,11 @@ export default function ServerView() {
   // Update read status when clicking a channel
   const handleChannelClick = async (channelId: string) => {
     setSelectedChannelId(channelId);
+    
+    // On mobile, switch to chat view
+    if (isMobile) {
+      setMobileView("chat");
+    }
     
     // Mark channel as read
     if (session?.user) {
@@ -497,103 +531,229 @@ export default function ServerView() {
     );
   }
 
-  return (
-    <div className="flex flex-col h-full">
-      {temporaryAccess && <TemporaryAccessBanner expiresAt={accessExpiresAt} />}
+  const toggleMobileView = (view: MobileView) => {
+    setMobileView(view);
+  };
 
-      <div className="flex flex-1 min-h-0">
-        {/* Channels sidebar */}
-        <div className="w-64 bg-gray-800 p-4 flex flex-col overflow-y-auto">
-          <div className="mb-6">
-            <div className="flex justify-between items-center mb-1">
-              <h3 className="font-semibold text-xl text-white">
-                {server.name}
-              </h3>
-              <div className="flex items-center">
-                {(canInvite || isServerOwner) && (
-                  <button
-                    onClick={() => setShowInviteModal(true)}
-                    className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700 mr-1"
-                    title="Invite People"
-                  >
-                    <LinkIcon className="h-4 w-4" />
-                  </button>
-                )}
-                  {isServerOwner && (
-                  <div className="relative" ref={menuRef}>
+  const renderChannelsSidebar = () => (
+    <div className="w-full md:w-64 bg-gray-800 p-4 flex flex-col overflow-y-auto">
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-1">
+          <h3 className="font-semibold text-xl text-white">
+            {server.name}
+          </h3>
+          <div className="flex items-center">
+            {(canInvite || isServerOwner) && (
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700 mr-1"
+                title="Invite People"
+              >
+                <LinkIcon className="h-4 w-4" />
+              </button>
+            )}
+            {isServerOwner && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowServerMenu(!showServerMenu);
+                  }}
+                  className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
+                  title="Server Settings"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+
+                {showServerMenu && (
+                  <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowServerMenu(!showServerMenu);
+                      onClick={() => {
+                        setShowServerMenu(false);
+                        setShowDeleteModal(true);
                       }}
-                      className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
-                      title="Server Settings"
+                      className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
                     >
-                      <MoreVertical className="h-4 w-4" />
+                      <Trash className="h-4 w-4 mr-2" />
+                      Delete Server
                     </button>
-
-                    {showServerMenu && (
-                      <div className="absolute right-0 mt-1 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
-                        <button
-                          onClick={() => {
-                            setShowServerMenu(false);
-                            setShowDeleteModal(true);
-                          }}
-                          className="flex items-center w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800"
-                        >
-                          <Trash className="h-4 w-4 mr-2" />
-                          Delete Server
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
-            </div>
-            {server.description && (
-              <p className="text-sm text-gray-400">{server.description}</p>
             )}
           </div>
+        </div>
+        {server.description && (
+          <p className="text-sm text-gray-400">{server.description}</p>
+        )}
+      </div>
 
-          <div className="mb-4 overflow-y-auto">
-            <div className="flex items-center justify-between mb-2 px-2">
-              <h4 className="uppercase text-xs font-semibold text-gray-400">
-                Channels
-              </h4>
-              {isServerOwner && (
-                <button
-                  onClick={() => setShowManageChannels(true)}
-                  className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700"
-                  title="Manage Channels"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+      <div className="mb-4 overflow-y-auto flex-1">
+        <div className="flex items-center justify-between mb-2 px-2">
+          <h4 className="uppercase text-xs font-semibold text-gray-400">
+            Channels
+          </h4>
+          {isServerOwner && (
+            <button
+              onClick={() => setShowManageChannels(true)}
+              className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700"
+              title="Manage Channels"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <div className="space-y-1">
+          {channels.map((channel) => (
+            <div
+              key={channel.id}
+              className={`flex items-center px-2 py-1 ${
+                selectedChannelId === channel.id
+                  ? "bg-gray-700 text-white"
+                  : "text-gray-300 hover:bg-gray-700"
+              } rounded cursor-pointer`}
+              onClick={() => handleChannelClick(channel.id)}
+            >
+              <Hash className="h-4 w-4 mr-2 text-gray-400" />
+              <span>{channel.name}</span>
+              {unreadChannels.has(channel.id) && (
+                <div className="ml-auto w-2 h-2 bg-blue-500 rounded-full" />
               )}
             </div>
-            <div className="space-y-1">
-              {channels.map((channel) => (
-                <div
-                  key={channel.id}
-                  className={`flex items-center px-2 py-1 ${
-                    selectedChannelId === channel.id
-                      ? "bg-gray-700 text-white"
-                      : "text-gray-300 hover:bg-gray-700"
-                  } rounded cursor-pointer`}
-                  onClick={() => handleChannelClick(channel.id)}
-                >
-                  <Hash className="h-4 w-4 mr-2 text-gray-400" />
-                  <span>{channel.name}</span>
-                  {unreadChannels.has(channel.id) && (
-                    <div className="ml-auto w-2 h-2 bg-blue-500 rounded-full" />
+          ))}
+        </div>
+      </div>
+      
+      {/* Mobile: Show view toggles */}
+      {isMobile && (
+        <div className="mt-auto pt-4 border-t border-gray-700 flex justify-between">
+          <button 
+            onClick={() => toggleMobileView("channels")}
+            className={`p-2 ${mobileView === "channels" ? "text-white bg-gray-700" : "text-gray-400"} rounded`}
+          >
+            <Hash className="h-5 w-5" />
+          </button>
+          <button 
+            onClick={() => toggleMobileView("chat")}
+            className={`p-2 ${mobileView === "chat" ? "text-white bg-gray-700" : "text-gray-400"} rounded`}
+          >
+            <MessageSquare className="h-5 w-5" />
+          </button>
+          <button 
+            onClick={() => toggleMobileView("members")}
+            className={`p-2 ${mobileView === "members" ? "text-white bg-gray-700" : "text-gray-400"} rounded`}
+          >
+            <Users className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderMembersSidebar = () => (
+    <div className="w-full md:w-56 bg-gray-800 p-4 overflow-y-auto">
+      {/* Mobile: Back button */}
+      {isMobile && (
+        <div className="flex items-center mb-4">
+          <button 
+            onClick={() => setMobileView("channels")}
+            className="mr-2 text-gray-400 hover:text-white"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h4 className="uppercase text-xs font-semibold text-gray-400 flex items-center">
+            Back to Channels
+          </h4>
+        </div>
+      )}
+      
+      <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 flex items-center">
+        <Users className="h-3 w-3 mr-1" />
+        Members ({members.length})
+      </h4>
+      <div className="space-y-2">
+        {members.map((member) => (
+          <div
+            key={member.user_id}
+            className="flex items-center justify-between text-gray-300 group"
+          >
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-700 mr-2 flex items-center justify-center uppercase text-xs">
+                {(member.display_name || member.username).charAt(0)}
+              </div>
+              <div>
+                <div className="text-sm">
+                  {member.display_name || member.username}
+                  {member.temporary_access && (
+                    <span className="ml-2 text-xs text-yellow-400">
+                      (temp)
+                    </span>
                   )}
                 </div>
-              ))}
+                <div className="text-xs text-gray-400">{member.role}</div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Main content area */}
-        <div className="flex-1 bg-gray-900 overflow-y-auto">
+            {canKick &&
+              member.user_id !== session?.user?.id &&
+              member.role !== "owner" && (
+                <button
+                  onClick={() => handleKickMember(member)}
+                  className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 p-1"
+                  title="Kick Member"
+                >
+                  <UserX className="h-4 w-4" />
+                </button>
+              )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Mobile UI: Define which components to show based on the current mobile view
+  const renderMobileView = () => {
+    if (mobileView === "channels") {
+      return (
+        <div className="flex flex-col h-full">
+          {renderChannelsSidebar()}
+        </div>
+      );
+    }
+    
+    if (mobileView === "members") {
+      return (
+        <div className="flex flex-col h-full">
+          {renderMembersSidebar()}
+        </div>
+      );
+    }
+    
+    // Chat view (default)
+    return (
+      <div className="flex-1 bg-gray-900 overflow-y-auto h-full flex flex-col">
+        {/* Mobile: Show navigation header */}
+        {isMobile && (
+          <div className="bg-gray-800 p-2 flex items-center border-b border-gray-700">
+            <button 
+              onClick={() => setMobileView("channels")}
+              className="mr-2 text-gray-400 hover:text-white"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <span className="text-white font-medium">
+              {channels.find(c => c.id === selectedChannelId)?.name || "Channel"}
+            </span>
+            <button 
+              onClick={() => setMobileView("members")}
+              className="ml-auto text-gray-400 hover:text-white"
+            >
+              <Users className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+        
+        <div className="flex-1 overflow-hidden">
           <Routes>
             <Route path="/channel/:channelId" element={<ChannelView />} />
             <Route
@@ -611,52 +771,47 @@ export default function ServerView() {
             />
           </Routes>
         </div>
-
-        {/* Members sidebar */}
-        <div className="w-56 bg-gray-800 p-4 overflow-y-auto">
-          <h4 className="uppercase text-xs font-semibold text-gray-400 mb-2 flex items-center">
-            <Users className="h-3 w-3 mr-1" />
-            Members ({members.length})
-          </h4>
-          <div className="space-y-2">
-            {members.map((member) => (
-              <div
-                key={member.user_id}
-                className="flex items-center justify-between text-gray-300 group"
-              >
-                <div className="flex items-center">
-                  <div className="w-8 h-8 rounded-full bg-gray-700 mr-2 flex items-center justify-center uppercase text-xs">
-                    {(member.display_name || member.username).charAt(0)}
-                  </div>
-                  <div>
-                    <div className="text-sm">
-                      {member.display_name || member.username}
-                      {member.temporary_access && (
-                        <span className="ml-2 text-xs text-yellow-400">
-                          (temp)
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-400">{member.role}</div>
-                  </div>
-                </div>
-
-                {canKick &&
-                  member.user_id !== session?.user?.id &&
-                  member.role !== "owner" && (
-                    <button
-                      onClick={() => handleKickMember(member)}
-                      className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 p-1"
-                      title="Kick Member"
-                    >
-                      <UserX className="h-4 w-4" />
-                    </button>
-                  )}
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
+    );
+  };
+
+  // Desktop layout
+  const renderDesktopLayout = () => (
+    <div className="flex flex-1 min-h-0">
+      {/* Channels sidebar */}
+      {renderChannelsSidebar()}
+
+      {/* Main content area */}
+      <div className="flex-1 bg-gray-900 overflow-y-auto">
+        <Routes>
+          <Route path="/channel/:channelId" element={<ChannelView />} />
+          <Route
+            path="*"
+            element={
+              <div className="p-4">
+                <h2 className="text-2xl font-semibold mb-4 text-white">
+                  Welcome to {server.name}
+                </h2>
+                <p className="text-gray-400">
+                  Select a channel to start chatting!
+                </p>
+              </div>
+            }
+          />
+        </Routes>
+      </div>
+
+      {/* Members sidebar */}
+      {renderMembersSidebar()}
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full">
+      {temporaryAccess && <TemporaryAccessBanner expiresAt={accessExpiresAt} />}
+
+      {/* Render different layouts for mobile and desktop */}
+      {isMobile ? renderMobileView() : renderDesktopLayout()}
 
       {/* Modals */}
       {showInviteModal && server && (
@@ -698,3 +853,21 @@ export default function ServerView() {
     </div>
   );
 }
+
+// Missing component added here
+const MessageSquare = () => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    width="24" 
+    height="24" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className="lucide lucide-message-square"
+  >
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+  </svg>
+);

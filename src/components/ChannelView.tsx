@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../stores/authStore";
 import {
@@ -12,6 +12,7 @@ import {
   Trash,
   X,
   Check,
+  ArrowLeft
 } from "lucide-react";
 import {
   encryptMessage,
@@ -32,6 +33,7 @@ interface Message {
 
 export default function ChannelView() {
   const { channelId, serverId } = useParams();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -46,6 +48,7 @@ export default function ChannelView() {
     server_id: string;
     encryption_enabled: boolean;
   } | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
 
   // Message editing states
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -54,6 +57,16 @@ export default function ChannelView() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(
     null
   );
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Scroll to bottom of messages
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
@@ -176,6 +189,9 @@ export default function ChannelView() {
 
         console.log("Formatted messages:", formattedMessages);
         setMessages(formattedMessages);
+        
+        // Scroll to bottom after loading messages
+        setTimeout(scrollToBottom, 100);
       }
     } catch (err) {
       console.error("Unexpected error fetching messages:", err);
@@ -190,9 +206,25 @@ export default function ChannelView() {
 
     // Reset messages when changing channels
     setMessages([]);
+    setError(null);
 
     // Fetch channel info and messages
     fetchMessages();
+
+    // Mark channel as read
+    if (session?.user) {
+      try {
+        supabase
+          .from('channel_read_status')
+          .upsert({
+            user_id: session.user.id,
+            channel_id: channelId,
+            last_read_at: new Date().toISOString()
+          });
+      } catch (error) {
+        console.error('Error marking channel as read:', error);
+      }
+    }
 
     // Subscribe to new messages
     const channel = supabase
@@ -208,6 +240,7 @@ export default function ChannelView() {
         (payload) => {
           console.log("Received realtime message:", payload);
           fetchMessages();
+          scrollToBottom();
         }
       )
       .on(
@@ -245,6 +278,11 @@ export default function ChannelView() {
       channel.unsubscribe();
     };
   }, [channelId, serverId]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -297,9 +335,7 @@ export default function ChannelView() {
       console.log("Message sent successfully:", data);
 
       setNewMessage("");
-
-      // Refresh messages after sending
-      fetchMessages();
+      scrollToBottom();
     } catch (err) {
       console.error("Unexpected error sending message:", err);
       setSendError("An unexpected error occurred while sending your message");
@@ -412,35 +448,6 @@ export default function ChannelView() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Channel header */}
-      <div className="px-4 py-3 bg-gray-800 border-b border-gray-700 flex items-center">
-        <div className="bg-gray-700 w-6 h-6 rounded-md flex items-center justify-center mr-2">
-          <span className="text-gray-300">#</span>
-        </div>
-        <h3 className="font-medium text-white">{channelName}</h3>
-
-        {/* Show encryption status */}
-        {channelDetails?.encryption_enabled && (
-          <div className="ml-2 flex items-center text-green-400 text-xs">
-            <Lock className="h-3 w-3 mr-1" />
-            <span>Encrypted</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="ml-auto flex items-center text-red-400 text-sm">
-            <AlertCircle className="h-4 w-4 mr-1" />
-            <span className="mr-2">{error}</span>
-            <button
-              onClick={fetchMessages}
-              className="bg-gray-700 p-1 rounded hover:bg-gray-600"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-      </div>
-
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading ? (
@@ -466,8 +473,8 @@ export default function ChannelView() {
                   message.sender_display_name || message.sender_username
                 ).charAt(0)}
               </div>
-              <div className="flex-1">
-                <div className="flex items-baseline">
+              <div className="flex-1 break-words">
+                <div className="flex items-baseline flex-wrap">
                   <span className="font-medium text-white mr-2">
                     {message.sender_display_name || message.sender_username}
                   </span>
@@ -521,7 +528,7 @@ export default function ChannelView() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-gray-300 mt-1">
+                  <p className="text-gray-300 mt-1 break-words">
                     {message.encrypted_content}
                   </p>
                 )}
